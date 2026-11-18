@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Model Setup Guide · ocean-* documentation</title>
+<meta name="description" content="Model Setup Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="index.html" aria-current="page">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-prep</a></div><h1>Model Setup Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-prep</h2><ul><li><a href="index.html">Overview</a></li><li><a href="model-setup.html" aria-current="page">Model Setup Guide</a></li><li><a href="bathymetry.html">Bathymetry Guide</a></li><li><a href="boundaries-cmems.html">CMEMS Boundary Conditions Guide</a></li><li><a href="boundaries-cmip6.html">CMIP6 Boundary Conditions Guide</a></li><li><a href="tidal-boundaries.html">Tidal + CMIP6 mean boundary conditions</a></li><li><a href="delta-change-boundaries.html">Delta-change boundary conditions</a></li><li><a href="boundary-diagnostics.html">Boundary Diagnostics Guide</a></li><li><a href="initial-conditions.html">Initial Conditions Guide</a></li><li><a href="radiation-bc.html">Radiation Bias Correction Guide</a></li><li><a href="humidity-bc.html">Humidity Bias Correction Guide</a></li><li><a href="bias-correction-guide.html">Bias Correction of Atmospheric Forcings — User &amp; Technical Guide</a></li></ul></aside><article class="doc"><h1 id="model-setup-guide">Model Setup Guide</h1>
+<h2 id="overview">Overview</h2>
+<p>Setting up a new regional ocean model involves three independent pipelines, each driven by a YAML config file:</p>
+<div class="codehilite"><pre><span></span><code>init-bathymetry          →  config/&lt;model&gt;_bathy_create.yaml
+init-boundaries          →  config/&lt;model&gt;_bdy_create.yaml
+init-initial-conditions  →  config/&lt;model&gt;_init_create.yaml
+</code></pre></div>
+
+<p>The wizard CLIs prompt for all required values and write the config file. Once you have configs, the run CLIs execute the actual work.</p>
+<h2 id="directory-layout">Directory layout</h2>
+<div class="codehilite"><pre><span></span><code>mymodel/
+  config/
+    mymodel_bathy_create.yaml   # bathymetry regrid config
+    mymodel_bdy_create.yaml     # boundary conditions config
+    mymodel_init_create.yaml    # initial conditions config
+  bdy_coords/
+    mymodel_bdy_lonlat.txt      # open boundary point coordinates (lon lat)
+</code></pre></div>
+
+<h2 id="step-1--create-configs-interactively">Step 1 — Create configs interactively</h2>
+<p>Run from the model directory (or pass <code>--output</code> to control the file path):</p>
+<div class="codehilite"><pre><span></span><code>init-bathymetry<span class="w">           </span>--output<span class="w"> </span>config/mymodel_bathy_create.yaml
+init-boundaries<span class="w">           </span>--output<span class="w"> </span>config/mymodel_bdy_create.yaml
+init-initial-conditions<span class="w">   </span>--output<span class="w"> </span>config/mymodel_init_create.yaml
+</code></pre></div>
+
+<h2 id="step-2--bathymetry">Step 2 — Bathymetry</h2>
+<p>Check what the pipeline will do, then run it:</p>
+<div class="codehilite"><pre><span></span><code>bathymetry-regrid<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bathy_create.yaml<span class="w"> </span>--dryrun
+bathymetry-regrid<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bathy_create.yaml
+</code></pre></div>
+
+<p>See <a href="bathymetry.html">bathymetry.md</a> for full details.</p>
+<h2 id="step-3--boundary-conditions">Step 3 — Boundary conditions</h2>
+<p>Check CMEMS dataset coverage before downloading:</p>
+<div class="codehilite"><pre><span></span><code>check-cmems-coverage<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+run-cmems-boundaries<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml<span class="w"> </span>--dryrun
+run-cmems-boundaries<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+</code></pre></div>
+
+<p>See <a href="boundaries-cmems.html">boundaries-cmems.md</a> or <a href="boundaries-cmip6.html">boundaries-cmip6.md</a>.</p>
+<h2 id="step-4--initial-conditions">Step 4 — Initial conditions</h2>
+<div class="codehilite"><pre><span></span><code>download-init-conditions<span class="w"> </span>--config<span class="w"> </span>config/mymodel_init_create.yaml<span class="w"> </span>--source<span class="w"> </span>AMM7<span class="w"> </span>--check-coverage
+download-init-conditions<span class="w"> </span>--config<span class="w"> </span>config/mymodel_init_create.yaml<span class="w"> </span>--source<span class="w"> </span>AMM7
+</code></pre></div>
+
+<p>See <a href="initial-conditions.html">initial-conditions.md</a>.</p>
+<h2 id="step-5--qc-diagnostics">Step 5 — QC diagnostics</h2>
+<p>After boundaries are produced, run diagnostics to check for NaN cells, coverage gaps, and stitching seams:</p>
+<div class="codehilite"><pre><span></span><code>boundary-diagnostics<span class="w"> </span>--output-dir<span class="w"> </span>./boundary_data/mymodel<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+</code></pre></div>
+
+<p>See <a href="boundary-diagnostics.html">boundary-diagnostics.md</a>.</p>
+<h2 id="package-dependencies">Package dependencies</h2>
+<table>
+<thead>
+<tr>
+<th>Extra</th>
+<th>Enables</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><em>(none)</em></td>
+<td>Wizards only</td>
+</tr>
+<tr>
+<td><code>[xesmf]</code></td>
+<td>Bathymetry regridding (requires <code>conda: esmpy, rioxarray</code>)</td>
+</tr>
+<tr>
+<td><code>[cmems]</code></td>
+<td>CMEMS boundary + IC download</td>
+</tr>
+<tr>
+<td><code>[cmip6]</code></td>
+<td>CMIP6 boundary download</td>
+</tr>
+<tr>
+<td><code>[plot]</code></td>
+<td>Map plots in reports</td>
+</tr>
+</tbody>
+</table>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[cmems,xesmf,plot]&quot;</span>
+</code></pre></div></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

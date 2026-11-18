@@ -1,0 +1,277 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Humidity Bias Correction Guide · ocean-* documentation</title>
+<meta name="description" content="Humidity Bias Correction Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="index.html" aria-current="page">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-prep</a></div><h1>Humidity Bias Correction Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-prep</h2><ul><li><a href="index.html">Overview</a></li><li><a href="model-setup.html">Model Setup Guide</a></li><li><a href="bathymetry.html">Bathymetry Guide</a></li><li><a href="boundaries-cmems.html">CMEMS Boundary Conditions Guide</a></li><li><a href="boundaries-cmip6.html">CMIP6 Boundary Conditions Guide</a></li><li><a href="tidal-boundaries.html">Tidal + CMIP6 mean boundary conditions</a></li><li><a href="delta-change-boundaries.html">Delta-change boundary conditions</a></li><li><a href="boundary-diagnostics.html">Boundary Diagnostics Guide</a></li><li><a href="initial-conditions.html">Initial Conditions Guide</a></li><li><a href="radiation-bc.html">Radiation Bias Correction Guide</a></li><li><a href="humidity-bc.html" aria-current="page">Humidity Bias Correction Guide</a></li><li><a href="bias-correction-guide.html">Bias Correction of Atmospheric Forcings — User &amp; Technical Guide</a></li></ul></aside><article class="doc"><h1 id="humidity-bias-correction-guide">Humidity Bias Correction Guide</h1>
+<h2 id="background-two-ways-to-express-atmospheric-humidity">Background: two ways to express atmospheric humidity</h2>
+<p>The atmosphere can hold a limited amount of water vapour, and that limit rises
+strongly with temperature.  Near-surface humidity is routinely reported in two
+different forms:</p>
+<p><strong>Dew-point temperature</strong> (<code>d2m</code>, unit K or °C) is the temperature to which a
+parcel of air must be cooled at constant pressure before water vapour begins to
+condense.  At the dew point the air is exactly saturated — its actual vapour
+pressure equals the saturation vapour pressure.  ERA5 stores this as the 2 m
+dew-point temperature.</p>
+<p><strong>Specific humidity</strong> (<code>huss</code>, unit kg kg⁻¹) is the mass of water vapour per
+unit mass of moist air.  It is the quantity most directly useful for computing
+latent heat fluxes and for comparing model thermodynamics.  CMIP6 models output
+this variable directly.</p>
+<table>
+<thead>
+<tr>
+<th>Dataset</th>
+<th>Variable</th>
+<th>Units</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ERA5</td>
+<td><code>d2m</code></td>
+<td>K</td>
+<td>2 m dew-point temperature</td>
+</tr>
+<tr>
+<td>ERA5</td>
+<td><code>sp</code></td>
+<td>Pa</td>
+<td>Surface pressure (companion variable)</td>
+</tr>
+<tr>
+<td>CMIP6</td>
+<td><code>huss</code></td>
+<td>kg kg⁻¹</td>
+<td>Near-surface specific humidity</td>
+</tr>
+</tbody>
+</table>
+<p>Because bias correction requires a common currency, ERA5 <code>d2m</code> must be
+converted to specific humidity before the correction is applied.</p>
+<hr />
+<h2 id="step-1--convert-era5-d2m-to-specific-humidity">Step 1 — Convert ERA5 d2m to specific humidity</h2>
+<h3 id="1a-saturation-vapour-pressure-from-dew-point-temperature-buck-equation">1a. Saturation vapour pressure from dew-point temperature (Buck equation)</h3>
+<p>At the dew-point temperature the air is exactly saturated, so the <strong>actual</strong>
+vapour pressure equals the <strong>saturation</strong> vapour pressure at that temperature.
+The Buck (1981) equation gives the saturation vapour pressure over a liquid
+water surface as a function of temperature:</p>
+<div class="codehilite"><pre><span></span><code>e(Td) = 6.1121 × exp( 17.368 × Td_C / (238.88 + Td_C) )   [hPa]
+</code></pre></div>
+
+<p>where <code>Td_C = d2m [K] − 273.15</code> is the dew-point in °C.</p>
+<p><strong>Constants explained:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Constant</th>
+<th>Value</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>6.1121</td>
+<td>hPa</td>
+<td>Saturation vapour pressure of water at 0 °C — the reference point of the Clausius–Clapeyron curve.  The formula returns this value when Td_C = 0.</td>
+</tr>
+<tr>
+<td>17.368</td>
+<td>dimensionless</td>
+<td>Empirical scaling of the Clausius–Clapeyron exponent, fitted to laboratory measurements of saturated water vapour over a liquid surface in the 0–50 °C range.</td>
+</tr>
+<tr>
+<td>238.88</td>
+<td>°C</td>
+<td>Empirical offset in the denominator; together with 17.368 it shapes how steeply vapour pressure rises with temperature.  Physically it absorbs the effective activation energy of evaporation from the Clausius–Clapeyron equation.</td>
+</tr>
+</tbody>
+</table>
+<p>The exponential form is a simplified solution to the Clausius–Clapeyron
+differential equation, which states that the slope of the saturation vapour
+pressure curve is proportional to <code>e / T²</code> (latent heat and gas-law terms
+absorbed into the empirical constants).  Buck's coefficients are fitted to
+measured data and are more accurate than earlier Magnus-formula variants,
+particularly in the 0–50 °C range relevant for NE-Atlantic forcing.</p>
+<h3 id="1b-specific-humidity-from-vapour-pressure">1b. Specific humidity from vapour pressure</h3>
+<p>Once the actual vapour pressure <code>e</code> is known, specific humidity follows from
+the ideal gas law.  Water vapour (molar mass M_w = 18.015 g mol⁻¹) and dry
+air (molar mass M_d = 28.964 g mol⁻¹) obey Dalton's law of partial pressures:</p>
+<div class="codehilite"><pre><span></span><code>q = ε × e / (p_hPa − (1 − ε) × e)
+</code></pre></div>
+
+<p><strong>Constants explained:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Symbol</th>
+<th>Value</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ε</td>
+<td>0.622</td>
+<td>Ratio of molar masses M_w / M_d = 18.015 / 28.964.  Not an empirical fit — it is an exact physical constant.  Water vapour is lighter than dry air, so humid air is less dense than dry air at the same pressure and temperature.</td>
+</tr>
+<tr>
+<td>p_hPa</td>
+<td>Pa / 100</td>
+<td>Total surface pressure in hPa (ERA5 <code>sp</code> divided by 100).</td>
+</tr>
+<tr>
+<td>e</td>
+<td>hPa</td>
+<td>Actual vapour pressure from step 1a.</td>
+</tr>
+</tbody>
+</table>
+<p>The denominator <code>p_hPa − (1 − ε) × e</code> is the effective partial pressure of
+the dry-air component.  At typical atmospheric conditions (e ≈ 10–30 hPa,
+p ≈ 1000 hPa) the correction term <code>(1 − ε) × e</code> is small (&lt; 1 %), so the
+simpler approximation <code>q ≈ ε × e / p</code> introduces negligible error.  The full
+form is used here for correctness.</p>
+<p>The result <code>q</code> is in kg kg⁻¹ — directly comparable to CMIP6 <code>huss</code>.</p>
+<p><strong>Note on surface pressure:</strong> ERA5 <code>sp</code> is required as a companion variable.
+Set <code>sp_variable: sp</code> and <code>sp_path</code> pointing to the ERA5 surface-pressure file.
+Using the standard atmosphere value p₀ = 1013.25 hPa in place of actual <code>sp</code>
+introduces &lt; 1 % error in q for mid-latitude conditions — acceptable if <code>sp</code> is
+unavailable, but the full pressure field is preferred for coastal and
+orographically complex regions.</p>
+<hr />
+<h2 id="step-2--bias-correction-qdm-multiplicative">Step 2 — Bias correction (QDM, multiplicative)</h2>
+<p>Specific humidity is a non-negative, bounded ratio.  It therefore uses
+<strong>multiplicative</strong> Quantile Delta Mapping (QDM) — the same treatment applied
+to precipitation (<code>pr</code>).</p>
+<div class="codehilite"><pre><span></span><code>Input:
+  ref    = q derived from ERA5 d2m + sp  (calibration period, e.g. 1990–2019)
+  hist   = CMIP6 historical huss         (calibration period)
+  future = CMIP6 future huss             (projection period)
+
+Output:
+  huss_corrected  (projection period, kg kg⁻¹)
+</code></pre></div>
+
+<p>Multiplicative QDM works in two steps per future time step:</p>
+<ol>
+<li>Compute the ratio <code>future / hist_quantile_match</code> — the model-projected
+   <em>relative</em> change in humidity, which is preserved.</li>
+<li>Apply that ratio to the corresponding ERA5 reference quantile — the
+   corrected value inherits the ERA5 climatological distribution while
+   retaining the CMIP6 trend signal.</li>
+</ol>
+<p>This is preferable to additive correction for humidity because relative changes
+(e.g. +5 % above climatology) are physically more meaningful than additive
+offsets, and the multiplicative form cannot produce negative values.</p>
+<hr />
+<h2 id="step-3--optional-back-convert-to-dew-point-temperature">Step 3 — Optional: back-convert to dew-point temperature</h2>
+<p>If the ocean model requires <code>d2m</code> rather than <code>huss</code>, invert the conversion:</p>
+<div class="codehilite"><pre><span></span><code>e = q × p_hPa / (ε + (1 − ε) × q)        # vapour pressure [hPa]
+
+Td_C = 238.88 × ln(e / 6.1121) / (17.368 − ln(e / 6.1121))
+
+d2m [K] = Td_C + 273.15
+</code></pre></div>
+
+<p>This is the algebraic inverse of steps 1a and 1b.</p>
+<hr />
+<h2 id="configuration">Configuration</h2>
+<p>Add <code>huss</code> to <code>config/bc.yaml</code> (see also <code>config/bc_correct_example.yaml</code>):</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">huss</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;*&quot;</span><span class="w">             </span><span class="c1"># multiplicative — specific humidity is non-negative</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bilinear</span><span class="w">    </span><span class="c1"># intensive quantity (ratio), not a flux</span>
+
+<span class="nt">reference</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">huss</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">        </span><span class="s">&quot;/data/ERA5/era5_d2m_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">d2m</span><span class="w">          </span><span class="c1"># triggers d2m → q conversion automatically</span>
+<span class="w">    </span><span class="nt">sp_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sp</span>
+<span class="w">    </span><span class="nt">sp_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;/data/ERA5/era5_sp_{year}.nc&quot;</span>
+
+<span class="nt">historical</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">huss</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/historical/huss/day/r1i1p1f1&quot;</span>
+
+<span class="nt">future_model</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">huss</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/{scenario}/huss/day/r1i1p1f1&quot;</span>
+</code></pre></div>
+
+<p>The <code>sp_variable</code> key is the trigger: when present,
+<code>bias_correct_forcings.py</code> calls <code>d2m_to_huss(d2m, sp)</code> before passing the
+result to the QDM pipeline.  No extra flags are needed.</p>
+<p><strong>Regridding note:</strong> <code>bilinear</code> is correct for <code>huss</code>.  Conservative
+interpolation — which preserves the area-integrated total — is reserved for
+extensive flux variables (<code>pr</code>, <code>rsds</code>, <code>rlds</code>).  Specific humidity is an
+intensive state variable like <code>tas</code>, <code>uas</code>, <code>vas</code>, and <code>psl</code>, so bilinear
+interpolation of the point value is appropriate.</p>
+<hr />
+<h2 id="temporal-disaggregation">Temporal disaggregation</h2>
+<p>If sub-daily forcing is required, <code>huss</code> should be disaggregated for
+consistency with the other continuously-varying variables (<code>tas</code>, wind, <code>psl</code>).
+The diurnal amplitude of specific humidity is modest (~5–15 % of the daily
+mean) but it feeds directly into the latent heat flux, so omitting it while
+disaggregating <code>tas</code> would introduce an inconsistency.</p>
+<p>Add a <code>huss</code> block to the <code>disaggregation.variables</code> section:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">disaggregation</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">huss</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;/data/ERA5/era5_d2m_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">d2m</span><span class="w">          </span><span class="c1"># triggers d2m → q conversion before diurnal ratio</span>
+<span class="w">      </span><span class="nt">sp_variable</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">sp</span>
+<span class="w">      </span><span class="nt">sp_path</span><span class="p">:</span><span class="w">       </span><span class="s">&quot;/data/ERA5/era5_sp_{year}.nc&quot;</span>
+</code></pre></div>
+
+<p>The <code>sp_variable</code> key triggers the same <code>d2m_to_huss()</code> conversion used in the
+reference-loading stage.  The diurnal ratio is then built from sub-daily
+<code>q = f(d2m, sp)</code> and applied multiplicatively to the daily bias-corrected
+<code>huss</code>:</p>
+<div class="codehilite"><pre><span></span><code>huss_hourly(t, h) = huss_daily_bc(t) × ERA5_q_diurnal_ratio(DOY(t), h)
+</code></pre></div>
+
+<p>where <code>ERA5_q_diurnal_ratio = ERA5_q_hour / ERA5_q_daily_mean</code>.</p>
+<p>No <code>scale_factor</code> is needed: the ratio computation cancels any unit offset
+between the raw <code>d2m</code> input and the derived <code>q</code>.</p>
+<hr />
+<h2 id="running">Running</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Include huss in a full bias correction run (correction + disaggregation)</span>
+bc<span class="w"> </span>correct<span class="w"> </span>--config<span class="w"> </span>config/bc.yaml
+
+<span class="c1"># Correct only huss (skip disaggregation)</span>
+bc<span class="w"> </span>correct<span class="w"> </span>--config<span class="w"> </span>config/bc.yaml<span class="w"> </span>--variable<span class="w"> </span>huss<span class="w"> </span>--steps<span class="w"> </span>correct
+
+<span class="c1"># Disaggregate only (uses previously written BC files)</span>
+bc<span class="w"> </span>correct<span class="w"> </span>--config<span class="w"> </span>config/bc.yaml<span class="w"> </span>--variable<span class="w"> </span>huss<span class="w"> </span>--steps<span class="w"> </span>disaggregate
+
+<span class="c1"># Run diagnostics for huss</span>
+bc<span class="w"> </span>diagnostics<span class="w"> </span>--config<span class="w"> </span>config/bc.yaml<span class="w"> </span>--variable<span class="w"> </span>huss
+</code></pre></div>
+
+<hr />
+<h2 id="key-references">Key references</h2>
+<ul>
+<li>Buck (1981), <em>New equations for computing vapor pressure and enhancement
+  factor</em>, J. Appl. Meteor. <strong>20</strong>, 1527–1532. — Source of the 6.1121 / 17.368 / 238.88
+  constants; optimised for the 0–50 °C range over liquid water.</li>
+<li>Alduchov &amp; Eskridge (1996), <em>Improved Magnus Form Approximation of Saturation
+  Vapor Pressure</em>, J. Appl. Meteor. <strong>35</strong>, 601–609. — Alternative coefficients
+  for the same functional form.</li>
+<li>Cannon et al. (2015), <em>Bias Correction of GCM Precipitation by Quantile
+  Mapping</em>, J. Climate <strong>28</strong>, 6938–6959. — Derivation and properties of the
+  QDM algorithm.</li>
+</ul></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

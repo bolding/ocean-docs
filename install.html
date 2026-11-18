@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Installation · ocean-* documentation</title>
+<meta name="description" content="Single-environment setup for the full **ocean-\*** package family:">
+<link rel="icon" href="./assets/logo_stacked.png">
+<link rel="stylesheet" href="./assets/style.css"><link rel="stylesheet" href="./assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="./index.html"><img src="./assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="index.html">Overview</a><a href="install.html" aria-current="page">Installation</a><a href="data/index.html">ocean-data</a><a href="prep/index.html">ocean-prep</a><a href="post/index.html">ocean-post</a><a href="plot/index.html">ocean-plot</a><a href="common/index.html">ocean-common</a><a href="commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><h1>Installation</h1><p>Single-environment setup for the full **ocean-\*** package family:</p></div></section>
+<main><div class="layout single"><article class="doc"><h1 id="ocean-stack">ocean-stack</h1>
+<p>Single-environment setup for the full <strong>ocean-*</strong> package family:</p>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="common/index.html">ocean-common</a></td>
+<td>Small shared helpers (e.g. <code>ocean_common.progress</code>), no heavy deps</td>
+</tr>
+<tr>
+<td><a href="data/index.html">ocean-data</a></td>
+<td>Data loading, coordinate normalisation (<code>CoordinateMapper</code>), CMEMS coverage, xESMF regridding</td>
+</tr>
+<tr>
+<td><a href="plot/index.html">ocean-plot</a></td>
+<td>Cartopy maps, animations, YAML-driven plot configs</td>
+</tr>
+<tr>
+<td><a href="prep/index.html">ocean-prep</a></td>
+<td>Input preparation — bathymetry, boundary conditions, initial conditions, <strong>bias correction of CMIP6 forcing</strong></td>
+</tr>
+<tr>
+<td><a href="post/index.html">ocean-post</a></td>
+<td>Model validation, scenario analysis, and statistical reporting</td>
+</tr>
+</tbody>
+</table>
+<p>This repo contains no package code — environment files (<code>environment.yml</code>, <code>environment-windows.yml</code>) that install all five packages in editable mode, so changes to any repo are immediately visible without reinstalling, plus the update scripts and <code>check_doc_consistency.py</code>.
+The key reason for a shared environment is that <code>xesmf</code>/<code>esmpy</code> — used by <code>ocean-data</code> for obs→model regridding and by <code>ocean-prep</code> for bathymetry regridding and bias correction — must come from conda-forge and cannot be reliably pip-installed.
+On <strong>Windows</strong>, <code>esmpy</code> is stuck at 8.4.0 and incompatible with current <code>xesmf</code>; use <code>environment-windows.yml</code> instead — regridding operations fall back to <code>scipy.interpolate</code>.
+Use the individual repos directly only if you need a single package in isolation.</p>
+<p><a href="common/index.html">ocean-common</a> ·
+<a href="data/index.html">ocean-data</a> ·
+<a href="plot/index.html">ocean-plot</a> ·
+<a href="prep/index.html">ocean-prep</a> ·
+<a href="post/index.html">ocean-post</a></p>
+<hr />
+<h2 id="setup">Setup</h2>
+<p><strong>1. Clone all repos as siblings:</strong></p>
+<div class="codehilite"><pre><span></span><code>git<span class="w"> </span>clone<span class="w"> </span>git@github.com:bolding/ocean-common<span class="w"> </span>ocean-common
+git<span class="w"> </span>clone<span class="w"> </span>git@github.com:bolding/ocean-data<span class="w">  </span>ocean-data
+git<span class="w"> </span>clone<span class="w"> </span>git@github.com:bolding/ocean-plot<span class="w">  </span>ocean-plot
+git<span class="w"> </span>clone<span class="w"> </span>git@github.com:bolding/ocean-prep<span class="w">  </span>ocean-prep
+git<span class="w"> </span>clone<span class="w"> </span>git@github.com:bolding/ocean-post<span class="w"> </span>ocean-post
+git<span class="w"> </span>clone<span class="w"> </span>git@github.com:bolding/ocean-stack<span class="w"> </span>ocean-stack
+</code></pre></div>
+
+<p><strong>2. Create and activate the conda environment:</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="nb">cd</span><span class="w"> </span>ocean-stack
+
+<span class="c1"># Linux / macOS</span>
+conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment.yml
+
+<span class="c1"># Windows (xesmf unavailable — regridding falls back to scipy)</span>
+conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment-windows.yml
+
+conda<span class="w"> </span>activate<span class="w"> </span>ocean-stack
+</code></pre></div>
+
+<p>All five packages are installed in editable mode (<code>pip install -e</code>), so
+changes to any repo are immediately visible without reinstalling.</p>
+<p><strong>3. Verify:</strong></p>
+<div class="codehilite"><pre><span></span><code>python<span class="w"> </span>-c<span class="w"> </span><span class="s2">&quot;import ocean_common, ocean_data, ocean_plot, ocean_prep, ocean_post; print(&#39;ok&#39;)&quot;</span>
+bathymetry-regrid<span class="w"> </span>--help
+run-cmems-boundaries<span class="w"> </span>--help
+
+<span class="c1"># Run all test suites</span>
+<span class="k">for</span><span class="w"> </span>pkg<span class="w"> </span><span class="k">in</span><span class="w"> </span>ocean-common<span class="w"> </span>ocean-data<span class="w"> </span>ocean-plot<span class="w"> </span>ocean-prep<span class="w"> </span>ocean-post<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">    </span>pytest<span class="w"> </span>../<span class="nv">$pkg</span>
+<span class="k">done</span>
+</code></pre></div>
+
+<hr />
+<h2 id="updating">Updating</h2>
+<p>Use the provided scripts — they pull all five repos, update the conda
+environment if the environment file changed, verify each package is
+installed (and <code>pip install -e</code> any that are missing), then run the
+full test suite:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Linux / macOS (activate ocean-stack first)</span>
+./update-and-test.sh
+
+<span class="c1"># Windows</span>
+update-and-test.bat
+</code></pre></div>
+
+<hr />
+<h2 id="cli-commands">CLI commands</h2>
+<p>78 commands across the packages — each accepts <code>--help</code> for full usage.
+See <a href="commands.html">guides/cli-reference.md</a> for the full listing.</p>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Commands</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ocean-data</td>
+<td>11</td>
+<td>Data download and inspection (Argo, ICES, CMEMS, CMIP6, WOD, EMODnet)</td>
+</tr>
+<tr>
+<td>ocean-plot</td>
+<td>4</td>
+<td>Static Cartopy maps and time-lapse animations</td>
+</tr>
+<tr>
+<td>ocean-prep</td>
+<td>28</td>
+<td>Bathymetry, boundary conditions, initial conditions, rivers, bias correction</td>
+</tr>
+<tr>
+<td>ocean-post</td>
+<td>35</td>
+<td>Validation, scenario analysis, reporting</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="package-dependency-graph">Package dependency graph</h2>
+<div class="codehilite"><pre><span></span><code>ocean-common ← ocean-plot, ocean-prep, ocean-post   (no dependencies itself)
+
+ocean-data   ← ocean-plot
+             ← ocean-prep
+             ← ocean-post
+
+ocean-plot   ← ocean-prep   (map plots in bathymetry report + boundary diagnostics)
+             ← ocean-post  (validation map plots)
+</code></pre></div>
+
+<p><code>ocean-data</code> is the only shared base; <code>ocean-plot</code> is an optional but
+recommended layer for any workflow that produces figures.</p></article></div></main>
+<footer class="foot"><div class="footin"><img src="./assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

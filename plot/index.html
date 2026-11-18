@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ocean-plot · ocean-* documentation</title>
+<meta name="description" content="Maps, transects and animations from YAML configurations">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="index.html" aria-current="page">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><h1>ocean-plot</h1><p>Maps, transects and animations from YAML configurations</p></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-plot</h2><ul><li><a href="index.html" aria-current="page">Overview</a></li><li><a href="plot-guide.html">Static Plot Guide</a></li><li><a href="animations-guide.html">Animations User Guide</a></li></ul></aside><article class="doc"><h1 id="ocean-plot">ocean-plot</h1>
+<p>Scientific plotting and animation for ocean model data.  Provides <code>OceanPlotter</code>
+for Cartopy-based map plots, <code>Animator</code> for MP4 / interactive HTML time-series
+animations, and <code>Annotations</code> for time-gated labels, points, boxes, and arrows that
+can be placed over any frame.  All output is driven by YAML config files so plots
+are reproducible and tweakable without touching Python.</p>
+<p>For the full ocean-* toolkit, install via <a href="../install.html">ocean-stack</a> rather than this package alone.
+<code>ocean-stack</code> sets up all four packages in a single conda environment — the recommended route because <code>xesmf</code>/<code>esmpy</code>, used for regridding in <code>ocean-data</code> and <code>ocean-prep</code>, must come from conda-forge and cannot be reliably pip-installed.
+Use the standalone installation below only if you need this package in isolation.</p>
+<p>Part of the <strong>ocean-*</strong> family:
+<a href="../data/index.html">ocean-data</a> ·
+<a href="index.html">ocean-plot</a> ·
+<a href="../prep/index.html">ocean-prep</a> ·
+<a href="../post/index.html">ocean-post</a></p>
+<hr />
+<h2 id="gallery">Gallery</h2>
+<table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><img alt="SST map" src="../fig/plot/sst_map.png" /></td>
+<td><img alt="Salinity map" src="../fig/plot/salinity_map.png" /></td>
+</tr>
+<tr>
+<td>Sea surface temperature — cmocean <code>thermal</code> colormap, auto coastline resolution</td>
+<td>Salinity — cmocean <code>haline</code> colormap selected automatically from variable name</td>
+</tr>
+<tr>
+<td><img alt="Seasonal grid" src="../fig/plot/seasonal_grid.png" /></td>
+<td><img alt="Comparison" src="../fig/plot/comparison.png" /></td>
+</tr>
+<tr>
+<td>Seasonal means — 2×2 subplot layout with shared colorbar</td>
+<td>Model vs satellite — side-by-side comparison layout</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="installation">Installation</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># With conda (recommended — cartopy requires conda-forge)</span>
+conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment.yml
+conda<span class="w"> </span>activate<span class="w"> </span>ocean-plot
+
+<span class="c1"># Or with pip (ocean-data must be installed first)</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>../ocean-data
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.<span class="w">                 </span><span class="c1"># MP4 output also needs the ffmpeg binary (conda install ffmpeg)</span>
+</code></pre></div>
+
+<hr />
+<h2 id="quick-start">Quick start</h2>
+<p>Before plotting you need a NetCDF file with ocean or atmospheric data.
+Use <code>--info</code> to inspect what variables and dimensions it contains:</p>
+<div class="codehilite"><pre><span></span><code>ocean-plot<span class="w"> </span>--info<span class="w"> </span>/path/to/your/model.nc
+</code></pre></div>
+
+<p>Then either run the interactive wizard to generate a ready-to-use YAML:</p>
+<div class="codehilite"><pre><span></span><code>init-plot<span class="w">        </span><span class="c1"># guided config builder for static maps</span>
+init-animation<span class="w">   </span><span class="c1"># guided config builder for animations</span>
+</code></pre></div>
+
+<p>Or copy one of the example configs and edit the <code>input.file</code> and <code>variable</code> fields:</p>
+<div class="codehilite"><pre><span></span><code>cp<span class="w"> </span>examples/plot_map.yaml<span class="w"> </span>my_plot.yaml
+<span class="c1"># edit my_plot.yaml — set input.file and input.variable</span>
+ocean-plot<span class="w"> </span>--config<span class="w"> </span>my_plot.yaml<span class="w"> </span>--show
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_plot.plotting</span> <span class="kn">import</span> <span class="n">OceanPlotter</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+
+<span class="n">plotter</span> <span class="o">=</span> <span class="n">OceanPlotter</span><span class="p">()</span>
+<span class="n">fig</span><span class="p">,</span> <span class="n">ax</span><span class="p">,</span> <span class="n">im</span> <span class="o">=</span> <span class="n">plotter</span><span class="o">.</span><span class="n">plot_map</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="n">sst_array</span><span class="p">,</span>
+    <span class="n">lon</span><span class="o">=</span><span class="n">lon_2d</span><span class="p">,</span> <span class="n">lat</span><span class="o">=</span><span class="n">lat_2d</span><span class="p">,</span>
+    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;sst&#39;</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s1">&#39;Sea Surface Temperature&#39;</span><span class="p">,</span>
+    <span class="n">cbar_label</span><span class="o">=</span><span class="s1">&#39;SST [°C]&#39;</span><span class="p">,</span>
+    <span class="n">vmin</span><span class="o">=-</span><span class="mi">2</span><span class="p">,</span> <span class="n">vmax</span><span class="o">=</span><span class="mi">25</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">fig</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="s1">&#39;sst.png&#39;</span><span class="p">,</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">150</span><span class="p">,</span> <span class="n">bbox_inches</span><span class="o">=</span><span class="s1">&#39;tight&#39;</span><span class="p">)</span>
+</code></pre></div>
+
+<hr />
+<h2 id="commands">Commands</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ocean-plot</code></td>
+<td>Render a static Cartopy map from a NetCDF file using a YAML config</td>
+</tr>
+<tr>
+<td><code>ocean-animations</code></td>
+<td>Create time-lapse animations (horizontal map, transect, or two-panel comparison)</td>
+</tr>
+<tr>
+<td><code>init-plot</code></td>
+<td>Interactive wizard: generate an <code>ocean-plot</code> YAML config</td>
+</tr>
+<tr>
+<td><code>init-animation</code></td>
+<td>Interactive wizard: generate an <code>ocean-animations</code> YAML config</td>
+</tr>
+</tbody>
+</table>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Static map from a YAML config</span>
+ocean-plot<span class="w"> </span>--config<span class="w"> </span>plot.yaml
+ocean-plot<span class="w"> </span>--config<span class="w"> </span>plot.yaml<span class="w"> </span>--show<span class="w">             </span><span class="c1"># open in viewer</span>
+ocean-plot<span class="w"> </span>--config<span class="w"> </span>plot.yaml<span class="w"> </span>--time-index<span class="w"> </span>mean<span class="w">  </span><span class="c1"># time-averaged</span>
+ocean-plot<span class="w"> </span>--info<span class="w"> </span>/data/model.nc<span class="w">                 </span><span class="c1"># inspect variables first</span>
+
+<span class="c1"># Animation from a YAML config</span>
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>animation_map.yaml<span class="w">        </span><span class="c1"># horizontal map</span>
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>animation_transect.yaml<span class="w">   </span><span class="c1"># vertical transect</span>
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>animation_comparison.yaml<span class="w"> </span><span class="c1"># two-panel comparison</span>
+
+<span class="c1"># Interactive wizards</span>
+init-plot<span class="w">        </span><span class="c1"># guided YAML builder for ocean-plot</span>
+init-animation<span class="w">   </span><span class="c1"># guided YAML builder for ocean-animations</span>
+</code></pre></div>
+
+<hr />
+<h2 id="plot-types">Plot types</h2>
+<h3 id="static-maps-ocean-plot">Static maps (<code>ocean-plot</code>)</h3>
+<p>Renders a single 2-D field as a Cartopy map with coastlines, land fill, and
+auto-selected colormaps (via cmocean).  Config keys: <code>input</code>, <code>output</code>,
+<code>subset</code>, <code>vmin</code>, <code>vmax</code>, <code>colormap</code>, <code>title</code>, <code>style</code>, <code>annotations</code>.</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">plottype</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">map</span>
+<span class="nt">input</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/model.nc</span>
+<span class="w">  </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">temp</span>
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sst_jan.png</span>
+<span class="w">  </span><span class="nt">dpi</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">150</span>
+</code></pre></div>
+
+<h3 id="animations-ocean-animations">Animations (<code>ocean-animations</code>)</h3>
+<p>Three plot types, each driven by a YAML config:</p>
+<table>
+<thead>
+<tr>
+<th><code>plottype:</code></th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>map</code></td>
+<td>Horizontal field animation with optional time-series panels</td>
+</tr>
+<tr>
+<td><code>transect</code></td>
+<td>Depth–time or latitude–depth section</td>
+</tr>
+<tr>
+<td><code>comparison</code></td>
+<td>Side-by-side two-panel comparison (model vs observations)</td>
+</tr>
+</tbody>
+</table>
+<div class="codehilite"><pre><span></span><code><span class="nt">plottype</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">map</span>
+<span class="nt">input</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/model.nc</span>
+<span class="w">  </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zeta</span>
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssh_animation.mp4</span>
+<span class="w">  </span><span class="nt">fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</code></pre></div>
+
+<p>The <code>comparison</code> type supports per-panel unit conversion (<code>offset</code>/<code>factor</code>),
+per-panel colour ranges (<code>colorbar: individual</code>), and time-series subplots that
+overlay both datasets on the same panel:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">plottype</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">comparison</span>
+<span class="nt">left</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">input</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="nv">model.nc</span><span class="p p-Indicator">,</span><span class="nt"> variable</span><span class="p">:</span><span class="w"> </span><span class="nv">temp</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Model&quot;</span>
+<span class="nt">right</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">input</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">{</span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="nv">cci_sst.nc</span><span class="p p-Indicator">,</span><span class="nt"> variable</span><span class="p">:</span><span class="w"> </span><span class="nv">analysed_sst</span><span class="p p-Indicator">}</span>
+<span class="w">  </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Observations&quot;</span>
+<span class="w">  </span><span class="nt">offset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-273.15</span><span class="w">   </span><span class="c1"># K → °C</span>
+<span class="nt">colorbar</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shared</span>
+<span class="nt">timeseries</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Frontal</span><span class="nv"> </span><span class="s">zone&quot;</span>
+<span class="w">    </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">58.0</span>
+<span class="w">    </span><span class="nt">lon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">11.0</span>
+</code></pre></div>
+
+<h3 id="annotations">Annotations</h3>
+<p>Place text, points, boxes, lines, and arrows on any plot or animation frame.
+For animations, each annotation can be turned on/off at a specific time:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">annotations</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">text</span>
+<span class="w">    </span><span class="nt">x</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+<span class="w">    </span><span class="nt">y</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">55.0</span>
+<span class="w">    </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Storm</span><span class="nv"> </span><span class="s">event&quot;</span>
+<span class="w">    </span><span class="nt">time_on</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2023-01-15&quot;</span>
+<span class="w">    </span><span class="nt">time_off</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2023-01-20&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">point</span>
+<span class="w">    </span><span class="nt">x</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.5</span>
+<span class="w">    </span><span class="nt">y</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">53.2</span>
+<span class="w">    </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;FINO1&quot;</span>
+</code></pre></div>
+
+<hr />
+<h2 id="matplotlib-style">Matplotlib style</h2>
+<p><code>ocean-plot</code> and <code>ocean-animations</code> both honour matplotlib's native three-level
+config hierarchy (system → user <code>~/.config/matplotlib/matplotlibrc</code> → per-project
+<code>matplotlibrc</code> in the working directory).  To apply a named style sheet for a
+single run, add <code>style:</code> to the YAML:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">style</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">dark_background</span>
+</code></pre></div>
+
+<hr />
+<h2 id="guides-and-examples">Guides and examples</h2>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="animations-guide.html">examples/animations_guide.md</a></td>
+<td>Full animation workflow, all plot types, annotations, style</td>
+</tr>
+<tr>
+<td><a href="plot-guide.html">examples/plot_guide.md</a></td>
+<td>Static map workflow, init-plot wizard</td>
+</tr>
+<tr>
+<td><a href="examples/animation_map.yaml.html">examples/animation_map.yaml</a></td>
+<td>Annotated map animation template</td>
+</tr>
+<tr>
+<td><a href="examples/animation_transect.yaml.html">examples/animation_transect.yaml</a></td>
+<td>Annotated transect animation template</td>
+</tr>
+<tr>
+<td><a href="examples/animation_comparison.yaml.html">examples/animation_comparison.yaml</a></td>
+<td>Annotated two-panel comparison template</td>
+</tr>
+<tr>
+<td><a href="examples/plot_map.yaml.html">examples/plot_map.yaml</a></td>
+<td>Annotated static map template</td>
+</tr>
+<tr>
+<td><a href="examples/plotting_showcase.py.html">examples/plotting_showcase.py</a></td>
+<td>Programmatic showcase of OceanPlotter features</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>Python 3.11+ · License: MIT</em></p></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

@@ -1,0 +1,404 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ocean-post · ocean-* documentation</title>
+<meta name="description" content="Validation against observations, scenario analysis, statistics and reports">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="index.html" aria-current="page">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><h1>ocean-post</h1><p>Validation against observations, scenario analysis, statistics and reports</p></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-post</h2><ul><li><a href="index.html" aria-current="page">Overview</a></li><li><a href="run-validation.html">run-analyses Guide</a></li><li><a href="gridded-2d-validation.html">Gridded 2D Validation Guide</a></li><li><a href="gridded-3d-validation.html">Gridded 3D Validation Guide</a></li><li><a href="profile-validation.html">Profile Validation Guide</a></li><li><a href="tidal-analysis.html">Tidal Analysis Guide</a></li><li><a href="mle-comparison.html">MLE Cross-Experiment Comparison Guide</a></li><li><a href="scenarios.html">Scenario Analysis Guide</a></li><li><a href="river-projection.html">River Flow and Nutrient Load Projection Guide</a></li><li><a href="regridding.html">Regridding User Guide</a></li><li><a href="simulation-list.html">Simulation List Guide</a></li><li><a href="statistics-db.html">Statistics Database Guide</a></li><li><a href="manage-analyses.html">manage-analyses Guide</a></li><li><a href="reporting.html">Reporting Guide</a></li></ul></aside><article class="doc"><h1 id="ocean-post">ocean-post</h1>
+<p>Statistical validation and analysis toolkit for regional ocean models.  Validates
+model output against multiple observation streams (satellite, Argo, ICES, GLODAP,
+WOD, tidal gauges), runs scenario analyses, and publishes results as an interactive
+Hugo website or PDF report.</p>
+<p>Bias correction of CMIP6 atmospheric forcing has moved to
+<a href="../prep/index.html">ocean-prep</a>.</p>
+<p>Designed to be <strong>model-agnostic</strong> — any model that produces NetCDF or Zarr output
+is supported by describing its coordinate names in a single YAML file.  All
+configuration is layered (CLI flags override per-run YAML which overrides
+<code>.ocean-post.yaml</code>), so shared settings are declared once and never repeated.</p>
+<p>For the full ocean-* toolkit, install via <a href="../install.html">ocean-stack</a> rather than this package alone.
+<code>ocean-stack</code> sets up all four packages in a single conda environment — the recommended route because <code>xesmf</code>/<code>esmpy</code>, used here for regridding model output onto observation grids, must come from conda-forge and cannot be reliably pip-installed.
+Use the standalone installation below only if you need this package in isolation.</p>
+<p>Part of the <strong>ocean-*</strong> family:
+<a href="../data/index.html">ocean-data</a> ·
+<a href="../plot/index.html">ocean-plot</a> ·
+<a href="../prep/index.html">ocean-prep</a> ·
+<a href="index.html">ocean-post</a></p>
+<hr />
+<h2 id="typical-workflows">Typical workflows</h2>
+<p><strong>Operational validation loop</strong></p>
+<div class="codehilite"><pre><span></span><code>run-analyses validations
+    ↓  gridded 2D/3D, profiles (Argo/ICES/GLODAP/WOD), tidal, MLE ranking
+    ↓  writes analyses/areas/&lt;AREA&gt;/validations/&lt;EXPERIMENT&gt;/
+ocean-reporting --hugo /path/to/hugo/   # or --pdf report.pdf
+</code></pre></div>
+
+<p><strong>Climate-forcing preparation</strong> (bias correction now in ocean-prep)</p>
+<div class="codehilite"><pre><span></span><code>bc correct      (in ocean-prep — Delta / QM / QDM bias correction of CMIP6 forcing)
+    ↓
+bc diagnostics  (in ocean-prep — inspect calibration quality)
+    ↓
+river-projection  (delta-change river flow + nutrient loads)
+</code></pre></div>
+
+<p><strong>Automated post-simulation deployment</strong></p>
+<div class="codehilite"><pre><span></span><code>push-to-remote  (simulation server → analysis server)
+    ↓
+update-from-remote  (sync + run ocean-reporting + deploy to gh-pages)
+</code></pre></div>
+
+<hr />
+<h2 id="key-concepts">Key concepts</h2>
+<ul>
+<li><strong>Area</strong> — a geographic domain (e.g. <code>NS</code>, <code>ENA8</code>).</li>
+<li><strong>Experiment</strong> — a named model run within an area (e.g. <code>Baseline</code>, <code>ObsKd</code>).</li>
+<li>Together <code>area/experiment</code> uniquely identifies every simulation and determines
+  where outputs are written:
+  <code>analyses/areas/&lt;AREA&gt;/validations/&lt;EXPERIMENT&gt;/</code></li>
+</ul>
+<hr />
+<h2 id="installation">Installation</h2>
+<p>Install the two sibling packages first, then this one:</p>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>/path/to/ocean-data
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>/path/to/ocean-plot
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+</code></pre></div>
+
+<p>Or from the parent directory of all three repos in one go:</p>
+<div class="codehilite"><pre><span></span><code><span class="k">for</span><span class="w"> </span>pkg<span class="w"> </span><span class="k">in</span><span class="w"> </span>ocean-data<span class="w"> </span>ocean-plot<span class="w"> </span>ocean-post<span class="p">;</span><span class="w"> </span><span class="k">do</span><span class="w"> </span>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="nv">$pkg</span><span class="p">;</span><span class="w"> </span><span class="k">done</span>
+</code></pre></div>
+
+<hr />
+<h2 id="commands">Commands</h2>
+<h3 id="validation">Validation</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>What it validates</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gridded-2d-validation</code></td>
+<td>Surface / bottom / depth-layer fields vs satellite / WOA</td>
+<td><a href="gridded-2d-validation.html">gridded-2d-validation.md</a></td>
+</tr>
+<tr>
+<td><code>gridded-3d-validation</code></td>
+<td>Full water column vs gridded climatologies</td>
+<td><a href="gridded-3d-validation.html">gridded-3d-validation.md</a></td>
+</tr>
+<tr>
+<td><code>cruise-ctd-profiles</code></td>
+<td>Ship CTD casts</td>
+<td><a href="profile-validation.html">profile-validation.md</a></td>
+</tr>
+<tr>
+<td><code>argo-profiles</code></td>
+<td>Argo float profiles vs model</td>
+<td><a href="profile-validation.html">profile-validation.md</a></td>
+</tr>
+<tr>
+<td><code>glodap-profiles</code></td>
+<td>GLODAP bottle data vs model</td>
+<td><a href="profile-validation.html">profile-validation.md</a></td>
+</tr>
+<tr>
+<td><code>wod-profiles</code></td>
+<td>World Ocean Database profiles vs model</td>
+<td><a href="profile-validation.html">profile-validation.md</a></td>
+</tr>
+<tr>
+<td><code>ices-profiles</code></td>
+<td>ICES/ECOVAL profiles vs model</td>
+<td><a href="profile-validation.html">profile-validation.md</a></td>
+</tr>
+<tr>
+<td><code>fixed-platform</code></td>
+<td>Mooring / buoy time series vs model</td>
+<td><a href="profile-validation.html">profile-validation.md</a></td>
+</tr>
+<tr>
+<td><code>station-timeseries</code></td>
+<td>Long-term monitoring stations vs model</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>tidal-analysis</code></td>
+<td>Tidal constituents vs GESLA / FES2014 / TPXO9</td>
+<td><a href="tidal-analysis.html">tidal-analysis.md</a></td>
+</tr>
+<tr>
+<td><code>mle-comparison</code></td>
+<td>Rank experiments by joint MLE in SVD space</td>
+<td><a href="mle-comparison.html">mle-comparison.md</a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="bias-correction-now-in-ocean-prep">Bias correction (now in ocean-prep)</h3>
+<p><code>bc correct</code>, <code>bc diagnostics</code>, and <code>bc check</code> have moved to
+<a href="../prep/index.html">ocean-prep</a>.
+See ocean-prep/guides/
+for the BC guides.</p>
+<h3 id="scenarios">Scenarios</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Role</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>river-projection</code></td>
+<td>Future river flow and nutrient load projections</td>
+<td><a href="river-projection.html">river-projection.md</a></td>
+</tr>
+<tr>
+<td><code>river-diagnostics</code></td>
+<td>Diagnostic plots and tables from river-projection output</td>
+<td><a href="river-projection.html">river-projection.md</a></td>
+</tr>
+<tr>
+<td><code>single-scenario</code></td>
+<td>Single-model scenario analysis</td>
+<td><a href="scenarios.html">scenarios.md</a></td>
+</tr>
+<tr>
+<td><code>multi-scenario</code></td>
+<td>Multi-model scenario comparison</td>
+<td><a href="scenarios.html">scenarios.md</a></td>
+</tr>
+</tbody>
+</table>
+<h3 id="reporting--plotting">Reporting &amp; plotting</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Role</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ocean-reporting</code></td>
+<td>Hugo website or PDF from all results</td>
+<td><a href="reporting.html">reporting.md</a></td>
+</tr>
+<tr>
+<td><code>plot-2d-summary</code></td>
+<td>Summary maps across experiments (2D validation)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>plot-3d-summary</code></td>
+<td>Summary maps across experiments (3D validation)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>plot-regions</code></td>
+<td>Map of configured areas and sub-regions</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>station-map</code></td>
+<td>Map of long-term monitoring stations</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>download-station</code></td>
+<td>Download named long-term stations (BODC, Stonehaven, Helgoland)</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Animations and static map plots live in <strong>ocean-plot</strong> (<code>ocean-animations</code>,
+<code>ocean-plot</code>, <code>init-animation</code>, <code>init-plot</code>).<br />
+Data download commands live in <strong>ocean-data</strong> (<code>data-loader</code>, <code>argo-download</code>,
+<code>ices-download</code>, <code>emodnet-download</code>, <code>wod-download</code>, …).</p>
+</blockquote>
+<h3 id="maintenance--utilities">Maintenance &amp; utilities</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Role</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run-analyses</code></td>
+<td>Master orchestrator for all analysis steps</td>
+<td><a href="run-validation.html">run-validation.md</a></td>
+</tr>
+<tr>
+<td><code>manage-analyses</code></td>
+<td>Wipe, purge, sync, and migrate the analyses tree</td>
+<td><a href="manage-analyses.html">manage-analyses.md</a></td>
+</tr>
+<tr>
+<td><code>audit-layout</code></td>
+<td>List or delete files that violate the layout convention</td>
+<td><a href="manage-analyses.html#audit-layout-separate-tool">manage-analyses.md</a></td>
+</tr>
+<tr>
+<td><code>simulation-list</code></td>
+<td>Experiment registry (staging YAML → SQLite)</td>
+<td><a href="simulation-list.html">simulation-list.md</a></td>
+</tr>
+<tr>
+<td><code>stats-db</code></td>
+<td>Query and maintain <code>statistics.db</code></td>
+<td><a href="statistics-db.html">statistics-db.md</a></td>
+</tr>
+<tr>
+<td><code>regrid</code> / <code>ocean-regrid</code></td>
+<td>Regrid one NetCDF file to another's grid</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>update-from-remote</code></td>
+<td>Sync remote results, report, and deploy</td>
+<td>update-from-remote.md</td>
+</tr>
+<tr>
+<td><code>push-to-remote</code></td>
+<td>Push local analyses tree to a remote analysis server</td>
+<td>push-to-remote.md</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="quick-start">Quick start</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Run all validation steps for one experiment</span>
+run-analyses<span class="w"> </span>validations<span class="w"> </span>--area<span class="w"> </span>NS<span class="w"> </span>--experiment<span class="w"> </span>Baseline
+
+<span class="c1"># Run only one step (e.g. tidal)</span>
+run-analyses<span class="w"> </span>validations<span class="w"> </span>--area<span class="w"> </span>NS<span class="w"> </span>--experiment<span class="w"> </span>Baseline<span class="w"> </span>--step<span class="w"> </span>tidal
+
+<span class="c1"># Generate the Hugo website</span>
+ocean-reporting<span class="w"> </span>--analyses-dir<span class="w"> </span>analyses/<span class="w"> </span>--recursive<span class="w"> </span>--hugo<span class="w"> </span>/path/to/hugo/
+</code></pre></div>
+
+<hr />
+<h2 id="configuration">Configuration</h2>
+<p>Every CLI script loads config from two layers (highest priority wins):</p>
+<div class="codehilite"><pre><span></span><code>CLI flags  &gt;  per-run YAML (--config ...)  &gt;  .ocean-post.yaml
+</code></pre></div>
+
+<p><strong><code>.ocean-post.yaml</code></strong> in the project root (or <code>~/.config/ocean-post/ocean-post.yaml</code>
+for user-wide defaults) holds shared identity declared once per project —
+not output locations: <code>output.analyses_dir</code> belongs in the per-run config
+(every run already sets its own; a value here would silently override all
+of them with one machine-wide location):</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">author</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;K.</span><span class="nv"> </span><span class="s">Bolding&quot;</span>
+<span class="w">  </span><span class="nt">institute</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;BB&quot;</span>
+<span class="w">  </span><span class="nt">project</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;NorthSea-MFC&quot;</span>
+<span class="nt">model</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;pyGETM&quot;</span>
+</code></pre></div>
+
+<p>Per-run configs then only need the job-specific parts (<code>area</code>, <code>experiment</code>,
+<code>variables</code>, <code>observations</code>, <code>model.base_path</code>, etc.).  Missing required keys raise
+a clear error immediately; there are no silent hardcoded fallbacks.</p>
+<p>Annotated example configs for every analysis type live in <code>config/</code>.</p>
+<hr />
+<h2 id="tests">Tests</h2>
+<div class="codehilite"><pre><span></span><code>pytest<span class="w">       </span><span class="c1"># all tests</span>
+pytest<span class="w"> </span>-q<span class="w">    </span><span class="c1"># quiet (dots only)</span>
+</code></pre></div>
+
+<p>The suite covers coordinate mapping, statistics, layout paths, config utilities,
+the statistics database, and station reader dispatch.  Bias-correction algorithm
+tests are in <code>ocean-prep/tests/</code>.</p>
+<hr />
+<h2 id="guides">Guides</h2>
+<table>
+<thead>
+<tr>
+<th>Guide</th>
+<th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="gridded-2d-validation.html">guides/gridded-2d-validation.md</a></td>
+<td>Surface / bottom / layer validation against satellite and WOA</td>
+</tr>
+<tr>
+<td><a href="gridded-3d-validation.html">guides/gridded-3d-validation.md</a></td>
+<td>Full water-column validation against gridded climatologies</td>
+</tr>
+<tr>
+<td><a href="profile-validation.html">guides/profile-validation.md</a></td>
+<td>Argo, GLODAP, WOD, cruise CTD, fixed-platform workflow</td>
+</tr>
+<tr>
+<td><a href="tidal-analysis.html">guides/tidal-analysis.md</a></td>
+<td>Harmonic constituents, atlas and GESLA comparison</td>
+</tr>
+<tr>
+<td><a href="mle-comparison.html">guides/mle-comparison.md</a></td>
+<td>MLE cross-experiment ranking in SVD space</td>
+</tr>
+<tr>
+<td><a href="scenarios.html">guides/scenarios.md</a></td>
+<td>Scenario workflow: river projection, single-scenario, multi-scenario</td>
+</tr>
+<tr>
+<td><a href="river-projection.html">guides/river-projection.md</a></td>
+<td>Delta-change river flow and nutrient load projections</td>
+</tr>
+<tr>
+<td><a href="reporting.html">guides/reporting.md</a></td>
+<td>Hugo pages and PDF reports from analyses/</td>
+</tr>
+<tr>
+<td>guides/hugo-deployment.md</td>
+<td>Getting generated Hugo content actually live, and its real gotchas</td>
+</tr>
+<tr>
+<td><a href="run-validation.html">guides/run-validation.md</a></td>
+<td>Master orchestrator: run-analyses validations/scenarios</td>
+</tr>
+<tr>
+<td>guides/update-from-remote.md</td>
+<td>Sync → report → deploy pipeline</td>
+</tr>
+<tr>
+<td><a href="simulation-list.html">guides/simulation-list.md</a></td>
+<td>Experiment registry: staging YAML → SQLite</td>
+</tr>
+<tr>
+<td><a href="manage-analyses.html">guides/manage-analyses.md</a></td>
+<td>Wipe, purge, sync, migrate, and audit the analyses tree</td>
+</tr>
+<tr>
+<td><a href="statistics-db.html">guides/statistics-db.md</a></td>
+<td>statistics.db schema and query interface</td>
+</tr>
+</tbody>
+</table>
+<p>The full cross-package CLI reference (all 64 commands) is in
+ocean-stack/guides/cli-reference.md.</p>
+<p>Bias correction guides (humidity, radiation) live in
+ocean-prep/guides/.
+Data loading and plotting guides live in the sibling packages:
+ocean-data/guides/ ·
+ocean-plot/examples/</p>
+<hr />
+<p><em>Python 3.11+ · License: MIT</em></p></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

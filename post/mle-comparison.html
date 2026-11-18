@@ -1,0 +1,687 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>MLE Cross-Experiment Comparison Guide · ocean-* documentation</title>
+<meta name="description" content="MLE Cross-Experiment Comparison Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="index.html" aria-current="page">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-post</a></div><h1>MLE Cross-Experiment Comparison Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-post</h2><ul><li><a href="index.html">Overview</a></li><li><a href="run-validation.html">run-analyses Guide</a></li><li><a href="gridded-2d-validation.html">Gridded 2D Validation Guide</a></li><li><a href="gridded-3d-validation.html">Gridded 3D Validation Guide</a></li><li><a href="profile-validation.html">Profile Validation Guide</a></li><li><a href="tidal-analysis.html">Tidal Analysis Guide</a></li><li><a href="mle-comparison.html" aria-current="page">MLE Cross-Experiment Comparison Guide</a></li><li><a href="scenarios.html">Scenario Analysis Guide</a></li><li><a href="river-projection.html">River Flow and Nutrient Load Projection Guide</a></li><li><a href="regridding.html">Regridding User Guide</a></li><li><a href="simulation-list.html">Simulation List Guide</a></li><li><a href="statistics-db.html">Statistics Database Guide</a></li><li><a href="manage-analyses.html">manage-analyses Guide</a></li><li><a href="reporting.html">Reporting Guide</a></li></ul></aside><article class="doc"><h1 id="mle-cross-experiment-comparison-guide">MLE Cross-Experiment Comparison Guide</h1>
+<h2 id="overview">Overview</h2>
+<p>Standard validation metrics (RMSE, bias, correlation) compare each experiment against
+observations in isolation.  When you have three or more experiments that share the same
+observation dataset — sensitivity runs, ensemble members, or physics variants — a scalar
+metric gives no information about the joint structure of the errors.</p>
+<p>MLE comparison in reduced-rank (SVD) space addresses this.  The joint residual matrix
+across all experiments is decomposed with SVD, and each experiment is ranked by its
+Gaussian log-likelihood in the leading modes.  This is the same "optimal fingerprinting"
+framework used in climate attribution (Allen &amp; Tett 1999): the leading SVD modes capture
+the dominant joint variance pattern, and the log-likelihood in that low-dimensional space
+is a principled, multi-dimensional distance from perfect.</p>
+<p>The result is a ranking table where the best experiment has Δlog L = 0 and all others
+have Δlog L &lt; 0.  A large negative Δlog L means that experiment's residual pattern is
+substantially different from the best, in the directions that matter most across the
+ensemble.</p>
+<h2 id="why-svd">Why SVD?</h2>
+<p>The residual matrix <strong>R</strong> has shape n_obs × n_exp (often 100 000 × 8).  A naive
+multivariate Gaussian log-likelihood in the full n_obs-dimensional space is
+intractable for two reasons:</p>
+<ol>
+<li>
+<p><strong>The covariance matrix cannot be inverted.</strong>  With only n_exp columns, the
+   sample covariance of R has rank at most n_exp, far smaller than n_obs.  The
+   inverse does not exist and the Gaussian likelihood is undefined.</p>
+</li>
+<li>
+<p><strong>The column space of R is at most n_exp-dimensional.</strong>  No matter how many
+   observations there are, experiments can only differ along at most n_exp
+   independent directions.  Anything outside that subspace is shared error and
+   contributes nothing to the ranking.</p>
+</li>
+</ol>
+<p>SVD solves both problems by working exclusively in the low-dimensional subspace
+spanned by the experiment columns.  The decomposition R_std = U diag(s) Vᵀ
+reveals that subspace via the left singular vectors U.  Keeping the r leading
+modes (by the variance threshold) retains the directions of maximum joint
+variance — the directions where experiments most clearly differ — and discards
+the noise-dominated tail.</p>
+<p>Within this r-dimensional space the Gaussian log-likelihood is well-posed: there
+are at most n_exp − 1 non-trivial modes, r is small, and the remaining variance
+(the discarded tail) is absorbed into the σ² estimate.  The result is a
+principled, noise-regularised distance from perfect that is comparable across
+experiments regardless of how many observations exist.</p>
+<p>A secondary benefit is numerical: the SVD of an n_obs × n_exp matrix costs
+O(n_obs × n_exp²), which is fast even for large observation datasets because
+n_exp is always small (see Computational cost).</p>
+<h2 id="when-to-use-this">When to use this</h2>
+<ul>
+<li>You have three or more experiments with different physics, forcing, or grid settings.</li>
+<li>All experiments were evaluated against the same observation dataset (e.g. Argo floats
+  or GLODAP profiles).</li>
+<li>The experiments cover overlapping time periods and geographic domains.</li>
+</ul>
+<p>It is less useful when:</p>
+<ul>
+<li>You only have two experiments — the result collapses to a weighted RMSE comparison
+  and provides no additional information.</li>
+<li>Experiments cover non-overlapping years — the common observation footprint will be
+  empty or too small.</li>
+</ul>
+<h2 id="how-it-works">How it works</h2>
+<div class="codehilite"><pre><span></span><code>experiment DataFrames (time, lat, lon, depth, value, model_value, variable)
+         │
+         ▼
+1. Common footprint
+   Intersect observation keys present in ALL experiments with non-NaN obs and model values.
+
+         │
+         ▼
+2. Residual matrix R  [n_obs × n_exp]
+   R[i, k] = model_value[i,k] − obs_value[i]
+
+         │
+         ▼
+3. Standardise per variable
+   Divide each variable&#39;s rows by the obs standard deviation so TEMP, PSAL, and DOXY
+   are commensurable.
+
+         │
+         ▼
+4. SVD  →  R_std ≈ U · diag(s) · Vt
+   Select leading r modes by cumulative variance threshold (default 90%).
+
+         │
+         ▼
+5. Project each experiment: r̃_k = U_r^T · R_std[:, k]   shape (r,)
+
+         │
+         ▼
+6. Log-likelihood: log L_k = −½ σ⁻² ‖r̃_k‖²
+   Rank by Δlog L = log L_k − max(log L)
+
+         │
+         ▼
+7. Additive breakdown (diagnostics only)
+   For each group g (variable or obs type), rows are disjoint so:
+       r̃_k = Σ_g  U_r[g_mask]ᵀ R_std[g_mask, k]   (exact)
+   Per-group log-likelihood contribution:
+       log L_{k,g} = −½ σ⁻² r̃_{k,g}ᵀ r̃_k
+   Σ_g log L_{k,g} = log L_k  (exact, no cross-term correction needed)
+</code></pre></div>
+
+<h2 id="prerequisites">Prerequisites</h2>
+<p>Each experiment must first produce a residuals parquet file.  The path and
+filename depend on the analysis type:</p>
+<table>
+<thead>
+<tr>
+<th>Analysis</th>
+<th>Config key</th>
+<th>Parquet written</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argo-profiles</code></td>
+<td><code>output.save_residuals: true</code> (default on)</td>
+<td><code>argo_residuals.parquet</code></td>
+</tr>
+<tr>
+<td><code>glodap-profiles</code></td>
+<td>same</td>
+<td><code>glodap_residuals.parquet</code></td>
+</tr>
+<tr>
+<td><code>ices-profiles</code></td>
+<td>same</td>
+<td><code>ices_profiles_residuals.parquet</code></td>
+</tr>
+<tr>
+<td><code>cruise-ctd-profiles</code></td>
+<td>same</td>
+<td><code>cruise_ctd_residuals.parquet</code></td>
+</tr>
+<tr>
+<td><code>fixed-platform</code></td>
+<td>same</td>
+<td><code>fixed_platform_residuals.parquet</code></td>
+</tr>
+<tr>
+<td><code>gridded-2d-validation</code></td>
+<td><code>output.save_residuals: true</code> (default <strong>off</strong>)</td>
+<td><code>surface_residuals.parquet</code>, <code>bottom_residuals.parquet</code>, etc.</td>
+</tr>
+<tr>
+<td><code>gridded-3d-validation</code></td>
+<td><code>output.save_residuals: true</code> (default <strong>off</strong>)</td>
+<td><code>gridded3d_residuals.parquet</code></td>
+</tr>
+</tbody>
+</table>
+<p>Run each analysis once per experiment, changing <code>experiment:</code> in the config.
+All experiments must share the same <code>area:</code> so the observation footprint is
+comparable.</p>
+<h2 id="cli-usage">CLI usage</h2>
+<h3 id="step-1-generate-residual-files">Step 1: Generate residual files</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Profile observations (save_residuals: true is the default)</span>
+argo-profiles<span class="w"> </span>--config<span class="w"> </span>config/baseline.yaml
+argo-profiles<span class="w"> </span>--config<span class="w"> </span>config/sensitivity1.yaml
+argo-profiles<span class="w"> </span>--config<span class="w"> </span>config/sensitivity2.yaml
+
+<span class="c1"># Gridded surface obs (add save_residuals: true + spatial_thinning to the YAML)</span>
+gridded-2d-validation<span class="w"> </span>--config<span class="w"> </span>config/baseline_2d.yaml
+gridded-2d-validation<span class="w"> </span>--config<span class="w"> </span>config/sensitivity1_2d.yaml
+
+<span class="c1"># Gridded 3D obs (same)</span>
+gridded-3d-validation<span class="w"> </span>--config<span class="w"> </span>config/baseline_3d.yaml
+gridded-3d-validation<span class="w"> </span>--config<span class="w"> </span>config/sensitivity1_3d.yaml
+</code></pre></div>
+
+<h3 id="step-2-run-mle-comparison">Step 2: Run MLE comparison</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Auto-discover all experiments with Argo residuals for this area</span>
+mle-comparison<span class="w"> </span>--analyses-dir<span class="w"> </span><span class="nv">$OCEANICU_ANALYSES_FOLDER</span><span class="w"> </span>--area<span class="w"> </span>NS<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--obs-types<span class="w"> </span>argo<span class="w"> </span>--variables<span class="w"> </span>TEMP<span class="w"> </span>PSAL<span class="w"> </span>DOXY<span class="w"> </span>--diagnostics
+
+<span class="c1"># Exclude a specific experiment from auto-discovery</span>
+mle-comparison<span class="w"> </span>--analyses-dir<span class="w"> </span><span class="nv">$OCEANICU_ANALYSES_FOLDER</span><span class="w"> </span>--area<span class="w"> </span>NS<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--obs-types<span class="w"> </span>argo<span class="w"> </span>--exclude-experiments<span class="w"> </span>OldRun<span class="w"> </span>TestRun
+
+<span class="c1"># Explicitly name experiments (disables auto-discovery)</span>
+mle-comparison<span class="w"> </span>--analyses-dir<span class="w"> </span><span class="nv">$OCEANICU_ANALYSES_FOLDER</span><span class="w"> </span>--area<span class="w"> </span>NS<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--experiments<span class="w"> </span>Baseline<span class="w"> </span>Sensitivity1<span class="w"> </span>Sensitivity2<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--obs-types<span class="w"> </span>argo<span class="w"> </span>--variables<span class="w"> </span>TEMP<span class="w"> </span>PSAL<span class="w"> </span>DOXY
+
+<span class="c1"># Combine Argo (deep water) + fixed stations (coastal) for fuller coverage</span>
+mle-comparison<span class="w"> </span>--analyses-dir<span class="w"> </span><span class="nv">$OCEANICU_ANALYSES_FOLDER</span><span class="w"> </span>--area<span class="w"> </span>NS<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--obs-types<span class="w"> </span>argo<span class="w"> </span>fixed_platform<span class="w"> </span>--variables<span class="w"> </span>TEMP<span class="w"> </span>PSAL
+
+<span class="c1"># Gridded surface obs (e.g. satellite SST, bottom-T reanalysis)</span>
+mle-comparison<span class="w"> </span>--analyses-dir<span class="w"> </span><span class="nv">$OCEANICU_ANALYSES_FOLDER</span><span class="w"> </span>--area<span class="w"> </span>NS<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--obs-types<span class="w"> </span>surface<span class="w"> </span>--variables<span class="w"> </span>TEMP
+
+<span class="c1"># Combine gridded surface obs with Argo for joint surface + profile ranking</span>
+mle-comparison<span class="w"> </span>--analyses-dir<span class="w"> </span><span class="nv">$OCEANICU_ANALYSES_FOLDER</span><span class="w"> </span>--area<span class="w"> </span>NS<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--obs-types<span class="w"> </span>surface<span class="w"> </span>argo<span class="w"> </span>--variables<span class="w"> </span>TEMP<span class="w"> </span>PSAL
+
+<span class="c1"># Gridded 3D obs (e.g. WOA23 climatology)</span>
+mle-comparison<span class="w"> </span>--analyses-dir<span class="w"> </span><span class="nv">$OCEANICU_ANALYSES_FOLDER</span><span class="w"> </span>--area<span class="w"> </span>NS<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--obs-types<span class="w"> </span>gridded3d<span class="w"> </span>--variables<span class="w"> </span>TEMP<span class="w"> </span>PSAL
+
+<span class="c1"># Log-transform phytoplankton and oxygen before ranking</span>
+mle-comparison<span class="w"> </span>--analyses-dir<span class="w"> </span><span class="nv">$OCEANICU_ANALYSES_FOLDER</span><span class="w"> </span>--area<span class="w"> </span>NS<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--obs-types<span class="w"> </span>argo<span class="w"> </span>--variables<span class="w"> </span>TEMP<span class="w"> </span>PSAL<span class="w"> </span>CHLA<span class="w"> </span>DOXY<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--transforms<span class="w"> </span>CHLA:log<span class="w"> </span>DOXY:log
+</code></pre></div>
+
+<p>When <code>--experiments</code> is omitted the script scans
+<code>analyses/areas/&lt;area&gt;/validations/</code> for every experiment directory that
+contains <code>&lt;obs_type&gt;_residuals.parquet</code> for all requested obs types.  The
+<code>mle_comparison</code> output directory is always skipped.</p>
+<p>Residuals from all <code>--obs-types</code> are concatenated per experiment before the
+common footprint is built, so each obs source contributes its locations.</p>
+<p>Key options:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--analyses-dir</code></td>
+<td>none — effectively required</td>
+<td>Root of the analyses tree. No <code>./analyses</code> fallback, and unlike the validation scripts this one does <strong>not</strong> expand <code>${VAR}</code> — pass a real path, or a literal path under <code>analyses_dir:</code> in the config (see below).</td>
+</tr>
+<tr>
+<td><code>--area</code></td>
+<td>required</td>
+<td>Area code, e.g. <code>NS</code></td>
+</tr>
+<tr>
+<td><code>--experiments</code></td>
+<td>auto-discover</td>
+<td>Two or more experiment names; if omitted, all with residuals are used</td>
+</tr>
+<tr>
+<td><code>--exclude-experiments</code></td>
+<td>none</td>
+<td>Experiment names to drop from auto-discovery (ignored when <code>--experiments</code> is set)</td>
+</tr>
+<tr>
+<td><code>--obs-types</code></td>
+<td>required</td>
+<td>One or more: <code>argo</code>, <code>glodap</code>, <code>wod</code>, <code>fixed_platform</code>, <code>surface</code>, <code>bottom</code>, <code>gridded3d</code>, …</td>
+</tr>
+<tr>
+<td><code>--variables</code></td>
+<td>all in data</td>
+<td>Variable names to include</td>
+</tr>
+<tr>
+<td><code>--transforms</code></td>
+<td>none</td>
+<td>Per-variable transform: <code>VAR:TRANSFORM</code> pairs. See below.</td>
+</tr>
+<tr>
+<td><code>--rank</code></td>
+<td>auto</td>
+<td>Force SVD rank</td>
+</tr>
+<tr>
+<td><code>--variance-threshold</code></td>
+<td><code>0.90</code></td>
+<td>Cumulative variance for auto rank</td>
+</tr>
+<tr>
+<td><code>--sigma2-method</code></td>
+<td><code>pooled</code></td>
+<td>One of <code>pooled</code>, <code>median_exp</code>, <code>best_exp</code></td>
+</tr>
+<tr>
+<td><code>--diagnostics</code></td>
+<td>off</td>
+<td>Write scree plot, mode-loading plot, per-mode bar chart</td>
+</tr>
+<tr>
+<td><code>--output-dir</code></td>
+<td>auto</td>
+<td>Override output directory for results</td>
+</tr>
+</tbody>
+</table>
+<h3 id="variable-transforms">Variable transforms</h3>
+<p>For biogeochemical variables whose distributions are right-skewed (phytoplankton
+chlorophyll, nutrients, turbidity), a Gaussian residual assumption is not
+appropriate in linear space.  Applying a log-transform before the MLE makes
+the residuals approximately Gaussian:</p>
+<table>
+<thead>
+<tr>
+<th>Transform</th>
+<th>Applied as</th>
+<th>Use for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>log</code></td>
+<td>ln(model) − ln(obs) = ln(model/obs)</td>
+<td>Chlorophyll, POC, nutrients</td>
+</tr>
+<tr>
+<td><code>log10</code></td>
+<td>log₁₀(model) − log₁₀(obs)</td>
+<td>Same; more interpretable magnitudes</td>
+</tr>
+<tr>
+<td><code>sqrt</code></td>
+<td>√model − √obs</td>
+<td>Weakly skewed count-like variables</td>
+</tr>
+<tr>
+<td><code>none</code> / <code>identity</code></td>
+<td>model − obs (default)</td>
+<td>Temperature, salinity, …</td>
+</tr>
+</tbody>
+</table>
+<p>Rows where the raw value or model value is ≤ 0 are dropped before the
+common footprint is built (a warning is logged for each experiment).</p>
+<h3 id="using-a-config-file">Using a config file</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># config/mle_comparison.yaml</span>
+<span class="nt">area</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NS</span>
+<span class="nt">analyses_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/local/analyses</span><span class="w">   </span><span class="c1"># a real path — ${VAR} is NOT expanded here</span>
+<span class="c1"># experiments: [Baseline, Sensitivity1, Sensitivity2]  # omit to auto-discover</span>
+<span class="nt">exclude_experiments</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">OldRun</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># dropped from auto-discovery (ignored if experiments is set)</span>
+<span class="nt">obs_types</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">argo</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">fixed_platform</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># list for multi-source, or a single string</span>
+<span class="nt">variables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">TEMP</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">PSAL</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">CHLA</span><span class="p p-Indicator">]</span>
+<span class="nt">transforms</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">CHLA</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">log</span><span class="w">       </span><span class="c1"># ln(model/obs) residuals for chlorophyll</span>
+<span class="w">  </span><span class="nt">DOXY</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">log</span><span class="w">       </span><span class="c1"># ln(model/obs) residuals for dissolved oxygen</span>
+<span class="nt">rank</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3</span>
+<span class="nt">diagnostics</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>mle-comparison<span class="w"> </span>--config<span class="w"> </span>config/mle_comparison.yaml
+</code></pre></div>
+
+<p>Command-line flags override config file values.</p>
+<h2 id="output">Output</h2>
+<p>Results are written to <code>analyses/areas/&lt;area&gt;/validations/mle_comparison/</code>:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mle_ranking.csv</code></td>
+<td>Machine-readable ranking table</td>
+</tr>
+<tr>
+<td><code>mle_ranking.txt</code></td>
+<td>Human-readable ranking summary</td>
+</tr>
+<tr>
+<td><code>scree_plot.png</code></td>
+<td>Singular values + cumulative explained variance</td>
+</tr>
+<tr>
+<td><code>mode_loadings_mode0.png</code></td>
+<td>Spatial scatter of top loadings for mode 0 (and mode 1, …)</td>
+</tr>
+<tr>
+<td><code>per_mode_contributions.png</code></td>
+<td>Per-mode log-likelihood contributions by experiment</td>
+</tr>
+<tr>
+<td><code>contributions_by_variable.png</code></td>
+<td>Log-likelihood contributions broken down by variable (TEMP, PSAL, …)</td>
+</tr>
+<tr>
+<td><code>contributions_by_obs_type.png</code></td>
+<td>Log-likelihood contributions broken down by obs source (argo, ices_profiles, …) — only when multiple <code>--obs-types</code> are combined</td>
+</tr>
+</tbody>
+</table>
+<p><code>mle_ranking.csv</code> columns:</p>
+<table>
+<thead>
+<tr>
+<th>Column</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>experiment</code></td>
+<td>Experiment name</td>
+</tr>
+<tr>
+<td><code>log_likelihood</code></td>
+<td>Gaussian log-likelihood in SVD space</td>
+</tr>
+<tr>
+<td><code>rank</code></td>
+<td>1 = best</td>
+</tr>
+<tr>
+<td><code>delta_log_L</code></td>
+<td><code>log_likelihood − max(log_likelihood)</code>; 0 for the best</td>
+</tr>
+<tr>
+<td><code>aic</code></td>
+<td>Akaike information criterion (<code>−2 log L + 2</code>)</td>
+</tr>
+<tr>
+<td><code>explained_variance_captured</code></td>
+<td>Fraction of joint variance in the chosen rank</td>
+</tr>
+</tbody>
+</table>
+<h2 id="why-gridded-validation-scores-may-diverge-from-mle-rankings">Why gridded validation scores may diverge from MLE rankings</h2>
+<p>It is common to see a large improvement in a gridded 3D or surface RMSE score for one
+experiment while the MLE ranking shows little or no separation.  This is not a bug; it
+reflects a genuine difference in what the two metrics measure.</p>
+<p><strong>Gridded validation</strong> (e.g. <code>gridded-3d-validation</code>) compares the model to a gridded
+reference product — a WOA climatological mean, a CMEMS reanalysis, or a satellite
+analysis.  These products are spatially dense (every grid cell has a value) but heavily
+smoothed and, in the case of reanalyses, data-assimilated.  An experiment that is
+initialised from or constrained by the same data family will naturally score better on
+that metric.  The score also measures bulk domain-mean skill averaged over every grid
+cell, which can be dominated by a few large regions or seasons.</p>
+<p><strong>MLE ranking</strong> uses raw in-situ residuals from ARGO floats or ICES profiles — sparse,
+independent point measurements at actual ocean interior locations with no data
+assimilation applied.  It asks: <em>does this experiment produce residuals that are
+collectively closer to Gaussian noise at the places where observations exist?</em>  This is
+a stricter and more independent test.</p>
+<p>The divergence is therefore informative:</p>
+<table>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Interpretation</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Experiment A wins on gridded RMSE but not on MLE</td>
+<td>A may be tuned to match a particular gridded reference (or share its bias), but the improvement does not carry over to independent in-situ locations.</td>
+</tr>
+<tr>
+<td>Experiment A wins on MLE but not on gridded RMSE</td>
+<td>A may genuinely improve the interior water-mass structure at observation depths, even if the domain-mean surface or climatological score is similar.</td>
+</tr>
+<tr>
+<td>Both metrics agree</td>
+<td>The improvement is robust across data sources and spatial scales.</td>
+</tr>
+</tbody>
+</table>
+<p>Use both metrics together.  Neither supersedes the other; they answer different
+questions about model skill.</p>
+<h2 id="interpreting-results">Interpreting results</h2>
+<p>Only <code>delta_log_L</code> matters, not the absolute log-likelihood value.  <code>delta_log_L = 0</code>
+identifies the best experiment; more negative values indicate larger residuals in the
+joint SVD space.</p>
+<p>With two experiments the result is equivalent to a weighted RMSE comparison.  The method
+adds value from three experiments upward.</p>
+<p><strong>AIC</strong> (<code>−2 log L + 2</code>) can be used in a model-selection sense: prefer the experiment
+with the lowest AIC.  The <code>+ 2</code> term penalises the single free parameter σ².  For the
+purposes of cross-experiment ranking, AIC and Δlog L give the same ordering.</p>
+<h3 id="scree-plot">Scree plot</h3>
+<p>Shows the singular values and their cumulative explained variance.  If a single mode
+dominates, the ranking is essentially one-dimensional and driven by one error pattern.
+If several modes have similar singular values, the comparison is genuinely
+multi-dimensional and the mode-loading plots for each mode are all relevant.</p>
+<h3 id="mode-loading-plot">Mode-loading plot</h3>
+<p>Each SVD mode has a corresponding left singular vector <strong>U</strong> of length n_obs.  The
+mode-loading plot maps the top 30 entries by magnitude onto geographic space, where:</p>
+<ul>
+<li><strong>Circle size</strong> is proportional to the absolute value of the loading — larger circles
+  are the observation locations that most strongly define this mode and carry the most
+  weight in separating experiments.</li>
+<li><strong>Circle colour</strong> is the signed loading value.  Locations with the same colour move
+  together in this mode: when one experiment has a larger residual at a dark-red
+  location, it tends to have larger residuals at all other dark-red locations too.
+  Locations with opposite colours (red vs. blue) are anti-correlated in this mode.</li>
+<li><strong>Labels</strong> show the variable (e.g. PSAL, TEMP) at that location.</li>
+</ul>
+<p><strong>What to look for:</strong></p>
+<ul>
+<li>All circles the same colour → mode 0 captures a nearly uniform bias that all
+  experiments share.  The ranking reflects which experiment has the smallest overall
+  bias in that direction.</li>
+<li>A mix of red and blue → the mode captures a spatial contrast (e.g. north–south
+  or coastal–offshore gradient).  Experiments that do well in one region but poorly
+  in another will be separated here.</li>
+<li>Circles concentrated in one sub-region → that geographic area is driving the ranking.
+  Check whether the model resolution or forcing is different there.</li>
+</ul>
+<p><em>Example:</em> if the mode-0 map shows all-negative loadings of similar magnitude spread
+across the domain (as in a uniform salinity bias), mode 0 is telling you that the
+experiments differ mainly in their domain-wide mean salinity error, not in their
+spatial pattern.  An experiment with a smaller mean salinity bias will have a
+less-negative log-likelihood contribution in this mode.</p>
+<h3 id="per-mode-contributions-bar-chart">Per-mode contributions bar chart</h3>
+<p>Shows each experiment's log-likelihood contribution broken down by SVD mode.  One
+group of bars per mode (left to right), one bar per experiment per group.</p>
+<ul>
+<li><strong>Bar height</strong> (all negative) is <code>−½ σ⁻² r̃²</code> for that experiment in that mode:
+  a shorter bar means the residual projected onto this mode is smaller, i.e. better.</li>
+<li>When only <strong>one mode</strong> is shown (rank = 1), the total ranking collapses to a single
+  number.  All experiments are compared on the same dominant error pattern and their
+  relative bar heights directly mirror the <code>delta_log_L</code> ranking table.</li>
+<li>When <strong>multiple modes</strong> are shown, you can see whether an experiment that wins
+  overall does so because it is good across all modes, or because it excels in one
+  mode while being mediocre in others.</li>
+</ul>
+<p><em>Example:</em> if seven experiments all show similar bar heights in a single-mode result
+(bars clustered between −0.3 and −0.5), the experiments are not strongly separated.
+A large spread (one bar near 0, another near −1) indicates a clear winner.  Bars of
+almost identical height mean the observation dataset does not have enough discriminating
+power to separate those two experiments — consider adding more obs types or variables.</p>
+<h3 id="contributions-by-variable--obs-type">Contributions by variable / obs type</h3>
+<p>These charts decompose the total log-likelihood into additive per-variable (or
+per-obs-type) contributions.  The decomposition is exact: because the
+observation rows are partitioned by group, the group projected residuals
+sum to the total:</p>
+<div class="codehilite"><pre><span></span><code>r̃_k = Σ_g  U_r[g_mask]ᵀ R_std[g_mask, k]      (exact, not approximate)
+</code></pre></div>
+
+<p>The additive contribution of group g to experiment k's log-likelihood is then
+<code>−½ σ⁻² r̃_{k,g}ᵀ r̃_k</code>, and summing over groups recovers the total
+<code>log L_k = −½ σ⁻² ‖r̃_k‖²</code> exactly.  The bars therefore stack to the total
+log-likelihood bar for each experiment.</p>
+<ul>
+<li><strong>Bars shorter (less negative)</strong> for a group → that variable or obs source is
+  where the experiment performs best relative to the others.</li>
+<li><strong>One group dominates all experiments equally</strong> → the ranking is insensitive
+  to that group; removing it would not change the order.</li>
+<li><strong>One group separates the experiments</strong> → that variable or obs source carries
+  the discriminating power.  Cross-check with the mode-loading map to see
+  which geographic region is responsible.</li>
+</ul>
+<h2 id="rank-selection">Rank selection</h2>
+<p>The default automatic selection combines two criteria:</p>
+<ol>
+<li><strong>Variance threshold</strong>: smallest r where cumulative explained variance ≥
+   <code>variance_threshold</code> (default 0.90).</li>
+<li><strong>Elbow</strong>: the r at the largest second-difference drop in the singular value spectrum.</li>
+</ol>
+<p>The chosen rank is <code>min(threshold_r, elbow_r)</code>, clamped to <code>[1, n_modes − 1]</code>.</p>
+<p>Override with <code>--rank</code> when you have domain knowledge about how many independent error
+patterns to expect.  Too low a rank discards real signal; too high a rank projects onto
+noise and compresses the ranking.  The scree plot is the diagnostic to consult.</p>
+<h2 id="programmatic-use">Programmatic use</h2>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">lib.mle_comparison</span> <span class="kn">import</span> <span class="n">compare_experiments_mle</span>
+
+<span class="c1"># experiment_dfs: dict of experiment_name -&gt; DataFrame</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">compare_experiments_mle</span><span class="p">(</span>
+    <span class="n">experiment_dfs</span><span class="p">,</span>
+    <span class="n">variables</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;TEMP&#39;</span><span class="p">,</span> <span class="s1">&#39;PSAL&#39;</span><span class="p">,</span> <span class="s1">&#39;DOXY&#39;</span><span class="p">],</span>
+    <span class="n">variance_threshold</span><span class="o">=</span><span class="mf">0.90</span><span class="p">,</span>
+    <span class="n">return_diagnostics</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="n">ranking_df</span><span class="p">,</span> <span class="n">diag</span> <span class="o">=</span> <span class="n">result</span>
+
+<span class="nb">print</span><span class="p">(</span><span class="n">ranking_df</span><span class="p">)</span>
+<span class="c1"># Diagnostics dict keys:</span>
+<span class="c1">#   singular_values, explained_variance, chosen_rank,</span>
+<span class="c1">#   U_r, Vt_r, r_tilde, sigma2, meta_df, scalings</span>
+</code></pre></div>
+
+<p>Each DataFrame in <code>experiment_dfs</code> must have columns:
+<code>time</code>, <code>lat</code>, <code>lon</code>, <code>depth</code>, <code>value</code>, <code>model_value</code>, <code>variable</code>
+and optionally <code>profile_id</code>.</p>
+<h2 id="scope-and-the-independence-assumption">Scope and the independence assumption</h2>
+<p>The log-likelihood formula assumes independent observations:</p>
+<div class="codehilite"><pre><span></span><code>log L_k = −½ σ⁻² ‖r̃_k‖²
+</code></pre></div>
+
+<p>This is naturally satisfied for sparse in-situ data (Argo, GLODAP, WOD, cruise CTD)
+where floats and casts are separated by tens to hundreds of kilometres.</p>
+<h3 id="gridded-data--use-with-thinning">Gridded data — use with thinning</h3>
+<p><code>gridded-2d-validation</code> and <code>gridded-3d-validation</code> can also write residuals parquets
+(see those guides).  Dense gridded data violates the independence assumption: a 0.1°
+North Sea grid might have 50,000 points but a spatial correlation length of ~50 km,
+giving perhaps a few hundred effective degrees of freedom.  Without thinning, Δlog L
+values will look larger and more significant than they truly are.</p>
+<p>The <code>spatial_thinning</code> config in those scripts mitigates this:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">save_residuals</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">spatial_thinning</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">stride</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w">         </span><span class="c1"># keep every 5th grid point in lat and lon</span>
+<span class="w">    </span><span class="nt">z_stride</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span><span class="w">       </span><span class="c1"># (3D only) keep every 2nd depth level</span>
+<span class="w">    </span><span class="nt">max_rows</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100000</span><span class="w">  </span><span class="c1"># hard cap</span>
+</code></pre></div>
+
+<p><strong>Practical guidance:</strong></p>
+<ul>
+<li>Start with <code>stride: 5</code> and <code>max_rows: 100000</code>.  Re-run <code>mle-comparison</code> with
+  <code>stride: 3</code> and <code>stride: 8</code>; if the relative ranking is stable, the thinning
+  level is sufficient.</li>
+<li>For 3D gridded obs, also use <code>z_stride: 2</code> or <code>z_stride: 3</code> to reduce
+  depth-level correlation.</li>
+<li>Combining thinned gridded obs with profile obs (<code>--obs-types surface argo</code>) is
+  often more informative than either alone: gridded obs provide dense spatial
+  coverage of the surface; profiles provide depth structure at sparse locations.</li>
+<li>The SVD step is the same regardless of obs type — the leading modes capture the
+  dominant joint-variance pattern across all supplied obs.</li>
+</ul>
+<p>For the most defensible results where spatial covariance structure matters, average
+to regional boxes first and apply MLE to the box means, where the independence
+assumption is much more defensible.</p>
+<h2 id="computational-cost">Computational cost</h2>
+<p>The method is not computationally intensive.  The matrix being decomposed is
+<strong>n_obs × n_exp</strong>, and n_exp is always small (typically 3–10).</p>
+<table>
+<thead>
+<tr>
+<th>Step</th>
+<th>Complexity</th>
+<th>Typical size</th>
+<th>Cost</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Build common index / key intersection</td>
+<td>O(n_obs × n_exp)</td>
+<td>100k obs, 5 exp</td>
+<td>negligible</td>
+</tr>
+<tr>
+<td>DataFrame alignment and sorting</td>
+<td>O(n_obs log n_obs)</td>
+<td>—</td>
+<td>fast</td>
+</tr>
+<tr>
+<td>SVD of R_std</td>
+<td>O(n_obs × n_exp²)</td>
+<td>100k × 5</td>
+<td>seconds</td>
+</tr>
+<tr>
+<td>Project, log-L, ranking</td>
+<td>O(r × n_exp)</td>
+<td>3 × 5</td>
+<td>negligible</td>
+</tr>
+</tbody>
+</table>
+<p>The SVD is the mathematically dominant step, but because n_exp is tiny scipy uses the
+thin SVD and the cost scales linearly with n_obs.  A 100,000 × 5 matrix takes well
+under a second.</p>
+<p>The practical bottleneck is reading and joining the parquet files, not the maths.  The
+residual matrix R lives entirely in RAM: 1 million obs × 10 experiments × 8 bytes =
+80 MB, which is negligible for realistic datasets.</p>
+<p>For gridded data with <code>max_rows: 100000</code> and <code>stride: 5</code>, the combined parquet stays
+well under 100 MB and the SVD completes in seconds.  Without thinning (full-resolution
+gridded output) n_obs could reach tens of millions and the in-memory matrix would
+become expensive; always apply <code>spatial_thinning</code> (see Scope section above).</p>
+<h2 id="limitations">Limitations</h2>
+<ul>
+<li><strong>Common obs footprint required</strong>: all experiments must cover the same stations and
+  years.  Experiments with non-overlapping periods cannot be compared.</li>
+<li><strong>Diagonal covariance</strong>: observation errors are treated as independent and equal within
+  each variable.  Spatial correlation between obs is ignored.  This is a reasonable
+  approximation for scattered profile data and for thinned gridded data; it becomes
+  increasingly problematic as thinning is relaxed (see Scope above).</li>
+<li><strong>Low power with few experiments</strong>: with fewer than four experiments the SVD modes
+  are poorly constrained and rankings may be unreliable.</li>
+<li><strong>Pooled σ²</strong>: the noise variance is estimated across all experiments.  If one
+  experiment is catastrophically wrong, it inflates σ² and compresses the Δlog L
+  differences among the others.</li>
+</ul></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Boundary Diagnostics Guide · ocean-* documentation</title>
+<meta name="description" content="Boundary Diagnostics Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="index.html" aria-current="page">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-prep</a></div><h1>Boundary Diagnostics Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-prep</h2><ul><li><a href="index.html">Overview</a></li><li><a href="model-setup.html">Model Setup Guide</a></li><li><a href="bathymetry.html">Bathymetry Guide</a></li><li><a href="boundaries-cmems.html">CMEMS Boundary Conditions Guide</a></li><li><a href="boundaries-cmip6.html">CMIP6 Boundary Conditions Guide</a></li><li><a href="tidal-boundaries.html">Tidal + CMIP6 mean boundary conditions</a></li><li><a href="delta-change-boundaries.html">Delta-change boundary conditions</a></li><li><a href="boundary-diagnostics.html" aria-current="page">Boundary Diagnostics Guide</a></li><li><a href="initial-conditions.html">Initial Conditions Guide</a></li><li><a href="radiation-bc.html">Radiation Bias Correction Guide</a></li><li><a href="humidity-bc.html">Humidity Bias Correction Guide</a></li><li><a href="bias-correction-guide.html">Bias Correction of Atmospheric Forcings — User &amp; Technical Guide</a></li></ul></aside><article class="doc"><h1 id="boundary-diagnostics-guide">Boundary Diagnostics Guide</h1>
+<h2 id="overview">Overview</h2>
+<p>Reads boundary condition NetCDF files (from <code>run-cmems-boundaries</code>,
+<code>run-cmip6-boundaries</code>, <code>run-tidal-boundaries</code>, or <code>run-delta-boundaries</code>)
+and produces a set of QC plots and a Markdown report.</p>
+<table>
+<thead>
+<tr>
+<th>Output file</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>map_&lt;dataset&gt;.png</code></td>
+<td>Boundary points map coloured by segment, NaN points flagged red</td>
+</tr>
+<tr>
+<td><code>timeseries_&lt;dataset&gt;.png</code></td>
+<td>Segment-mean surface (solid) and bottom (dashed) time series</td>
+</tr>
+<tr>
+<td><code>hovmoller_&lt;dataset&gt;.png</code></td>
+<td>Hovmöller diagram along the full boundary</td>
+</tr>
+<tr>
+<td><code>profiles_&lt;dataset&gt;.png</code></td>
+<td>Mean depth profiles per segment (3-D variables only)</td>
+</tr>
+<tr>
+<td><code>seams_&lt;dataset&gt;.png</code></td>
+<td>Stitching-seam zoom plots (<code>--check-seams</code> only)</td>
+</tr>
+<tr>
+<td><code>REPORT.md</code></td>
+<td>Markdown summary linking all plots</td>
+</tr>
+</tbody>
+</table>
+<p>The surface/bottom time series plot shows two lines per segment: the
+surface value (solid) and the segment-mean bottom value (dashed).  The
+bottom depth is determined per-boundary-point as the last depth level that is
+non-NaN at all time steps — each point's geographic seafloor depth.</p>
+<hr />
+<h2 id="usage">Usage</h2>
+<h3 id="standard-run">Standard run</h3>
+<p>Point at the directory that contains the boundary NetCDF output files:</p>
+<div class="codehilite"><pre><span></span><code>boundary-diagnostics<span class="w"> </span>--output-dir<span class="w"> </span>./boundary_data/mymodel
+</code></pre></div>
+
+<p>Passing <code>--config</code> adds transition dates to the time-series plots (vertical lines where datasets are stitched):</p>
+<div class="codehilite"><pre><span></span><code>boundary-diagnostics<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output-dir<span class="w"> </span>./boundary_data/mymodel<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+</code></pre></div>
+
+<h3 id="seam-check">Seam check</h3>
+<p>After stitching multiple sources in time, verify that the join is smooth:</p>
+<div class="codehilite"><pre><span></span><code>boundary-diagnostics<span class="w"> </span>--output-dir<span class="w"> </span>./boundary_data/mymodel<span class="w"> </span>--check-seams
+</code></pre></div>
+
+<p>Produces a <code>seams_&lt;dataset&gt;.png</code> per variable zoomed to ±30 days around each transition date.</p>
+<h3 id="multiple-output-directories-combined-report">Multiple output directories (combined report)</h3>
+<p>When you have hourly and daily boundary files in separate directories, combine
+them into a single report with per-directory plot prefixes:</p>
+<div class="codehilite"><pre><span></span><code>boundary-diagnostics<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output-dir<span class="w"> </span>./boundary_data/mymodel/hourly<span class="w"> </span><span class="se">\</span>
+<span class="w">                 </span>./boundary_data/mymodel/daily<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--labels<span class="w"> </span>1h<span class="w"> </span>1d<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--diag-dir<span class="w"> </span>./boundary_data/mymodel/diagnostics
+</code></pre></div>
+
+<p>One <code>REPORT.md</code> is written with a section per directory.  The boundary-point
+map is generated once (from the first directory) since the spatial layout is
+shared.</p>
+<h3 id="restrict-to-specific-datasets">Restrict to specific datasets</h3>
+<div class="codehilite"><pre><span></span><code>boundary-diagnostics<span class="w"> </span>--output-dir<span class="w"> </span>./boundary_data/mymodel<span class="w"> </span>--dataset<span class="w"> </span>temperature<span class="w"> </span>salinity
+</code></pre></div>
+
+<h3 id="custom-output-directory">Custom output directory</h3>
+<p>By default, plots are written to <code>&lt;output-dir&gt;/diagnostics/</code>. Override with <code>--diag-dir</code>:</p>
+<div class="codehilite"><pre><span></span><code>boundary-diagnostics<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output-dir<span class="w"> </span>./boundary_data/mymodel<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--diag-dir<span class="w">   </span>./qc/mymodel
+</code></pre></div>
+
+<hr />
+<h2 id="options">Options</h2>
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--output-dir DIR [DIR …]</code></td>
+<td>One or more directories containing boundary NetCDF files</td>
+</tr>
+<tr>
+<td><code>--labels LABEL [LABEL …]</code></td>
+<td>Plot prefix labels for each directory (multi-dir mode)</td>
+</tr>
+<tr>
+<td><code>--config FILE</code></td>
+<td>YAML config that generated the boundaries (for transition dates)</td>
+</tr>
+<tr>
+<td><code>--dataset KEY …</code></td>
+<td>Process only these dataset keys</td>
+</tr>
+<tr>
+<td><code>--diag-dir DIR</code></td>
+<td>Override diagnostic output directory</td>
+</tr>
+<tr>
+<td><code>--check-seams</code></td>
+<td>Generate seam-zoom plots around transition dates</td>
+</tr>
+<tr>
+<td><code>--animate-hovmoller</code></td>
+<td>Generate animated cross-section MP4 files</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="what-to-look-for">What to look for</h2>
+<p><strong>Map plot</strong> — all boundary segments should be coloured; red × markers indicate NaN values.<br />
+Any NaN points that persist in the final output will need a segment override or a different source.</p>
+<p><strong>Time series</strong> — check for sudden jumps at stitching transition dates.  Use
+<code>--check-seams</code> to zoom in.  The dashed bottom line should follow a similar
+seasonal cycle to the surface but with reduced amplitude; a flat line may
+indicate the bottom depth is only one level.</p>
+<p><strong>Hovmöller</strong> — reveals persistent missing data (vertical stripes) or
+suspicious features propagating along the boundary.</p>
+<p><strong>Depth profiles</strong> — confirm plausible temperature/salinity structure; flat
+profiles can indicate bad interpolation or a masked level.</p></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

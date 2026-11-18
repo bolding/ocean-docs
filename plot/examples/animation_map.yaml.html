@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>examples/animation_map.yaml · ocean-* documentation</title>
+<meta name="description" content="Example file from ocean-plot">
+<link rel="icon" href="../../assets/logo_stacked.png">
+<link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../../index.html"><img src="../../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../../index.html">Overview</a><a href="../../install.html">Installation</a><a href="../../data/index.html">ocean-data</a><a href="../../prep/index.html">ocean-prep</a><a href="../../post/index.html">ocean-post</a><a href="../index.html" aria-current="page">ocean-plot</a><a href="../../common/index.html">ocean-common</a><a href="../../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="../index.html">ocean-plot</a> · example</div><h1>examples/animation_map.yaml</h1><p>Example file from ocean-plot</p></div></section>
+<main><div class="layout single"><article class="doc"><div class="codehilite"><pre><span></span><code><span class="c1"># ── animation_map.yaml ────────────────────────────────────────────────────────</span>
+<span class="c1"># Single-panel horizontal map animation.</span>
+<span class="c1">#</span>
+<span class="c1"># Usage:</span>
+<span class="c1">#   ocean-animations --config examples/animation_map.yaml</span>
+<span class="c1">#</span>
+<span class="c1"># plottype selects the animation kind — no --type flag needed.</span>
+<span class="c1"># ──────────────────────────────────────────────────────────────────────────────</span>
+
+<span class="nt">plottype</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">map</span>
+
+<span class="nt">input</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/ERA5/NA/era5_t2m_2019.nc</span>
+<span class="w">  </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">t2m</span>
+<span class="w">  </span><span class="nt">time_slice</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">    </span><span class="nt">end</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">365</span><span class="w">      </span><span class="c1"># number of frames; omit for full file</span>
+
+<span class="c1"># Spatial subset — omit to use the full domain</span>
+<span class="nt">subset</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">48</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">65</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-12</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># file: t2m_daily_NS.mp4   # omit for auto-naming from variable long_name</span>
+<span class="w">  </span><span class="nt">fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15</span>
+
+<span class="c1"># title: &quot;2 m Air Temperature — North Sea 2019&quot;  # omit for auto-title from variable metadata</span>
+<span class="c1"># colormap: thermal  # omit for auto-selection from variable metadata (thermal/balance/haline/…)</span>
+<span class="c1"># vmin: -5.0         # omit for auto-range from data</span>
+<span class="c1"># vmax: 25.0</span>
+
+<span class="c1"># ── Optional time series panels ───────────────────────────────────────────────</span>
+<span class="c1"># Uncomment to add panels showing the time series at up to 3 points.</span>
+<span class="c1"># Each point gets a coloured dot on the map and its own subplot.</span>
+<span class="c1"># Full time series is drawn as a thin gray background; the growing coloured</span>
+<span class="c1"># line advances with the animation.</span>
+<span class="c1">#</span>
+<span class="c1"># ts_layout: below     # &#39;below&#39; (default) or &#39;right&#39;</span>
+<span class="nt">timeseries</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;St.</span><span class="nv"> </span><span class="s">Malo&quot;</span>
+<span class="w">    </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">48.9</span>
+<span class="w">    </span><span class="nt">lon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-1.8</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cyan</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Bristol</span><span class="nv"> </span><span class="s">Channel&quot;</span>
+<span class="w">    </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">51.54</span>
+<span class="w">    </span><span class="nt">lon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-2.80</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">yellow</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wadden</span><span class="nv"> </span><span class="s">Sea&quot;</span>
+<span class="w">    </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">54.0</span>
+<span class="w">    </span><span class="nt">lon</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">8.5</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deepskyblue</span>
+
+<span class="c1"># ── Optional annotations ──────────────────────────────────────────────────────</span>
+<span class="c1"># Overlay static or time-gated geographic annotations on the map.</span>
+<span class="c1"># Remove the leading &#39;#&#39; from any block to activate it.</span>
+<span class="c1">#</span>
+<span class="c1"># annotations:</span>
+<span class="c1">#</span>
+<span class="c1">#   # ── text label ────────────────────────────────────────────────────────────</span>
+<span class="c1">#   - type: text</span>
+<span class="c1">#     lat: 57.0</span>
+<span class="c1">#     lon: 4.0</span>
+<span class="c1">#     text: &quot;North Sea&quot;</span>
+<span class="c1">#     fontsize: 11          # default 10</span>
+<span class="c1">#     color: white          # default white</span>
+<span class="c1">#     ha: center            # left/center/right, default left</span>
+<span class="c1">#     va: bottom            # top/center/bottom, default bottom</span>
+<span class="c1">#     fontweight: normal    # normal/bold, default normal</span>
+<span class="c1">#     bbox:                 # optional background box (remove key to omit)</span>
+<span class="c1">#       facecolor: black</span>
+<span class="c1">#       alpha: 0.5</span>
+<span class="c1">#       pad: 2</span>
+<span class="c1">#     # time_on: 0          # frame index or ISO date string; omit = always on</span>
+<span class="c1">#     # time_off: 100       # omit = stays on once activated</span>
+<span class="c1">#</span>
+<span class="c1">#   # ── marker (with optional text label) ────────────────────────────────────</span>
+<span class="c1">#   - type: point</span>
+<span class="c1">#     lat: 54.5</span>
+<span class="c1">#     lon: 6.0</span>
+<span class="c1">#     marker: &quot;*&quot;           # default &quot;o&quot;</span>
+<span class="c1">#     markersize: 10        # default 8</span>
+<span class="c1">#     color: red</span>
+<span class="c1">#     label: &quot;Station A&quot;   # optional; creates a second text artist</span>
+<span class="c1">#     # time_on: 30</span>
+<span class="c1">#</span>
+<span class="c1">#   # ── rectangle outline (optionally filled) ────────────────────────────────</span>
+<span class="c1">#   - type: box</span>
+<span class="c1">#     lat_min: 54.0</span>
+<span class="c1">#     lat_max: 58.0</span>
+<span class="c1">#     lon_min: 3.0</span>
+<span class="c1">#     lon_max: 7.0</span>
+<span class="c1">#     color: yellow</span>
+<span class="c1">#     linewidth: 1.5        # default 1.0</span>
+<span class="c1">#     alpha: 0.8            # default 1.0</span>
+<span class="c1">#     fill: false           # true = semi-transparent fill, default false</span>
+<span class="c1">#     label: &quot;&quot;             # optional text at top-left corner</span>
+<span class="c1">#     # time_on: 50</span>
+<span class="c1">#</span>
+<span class="c1">#   # ── polyline through [lat, lon] waypoints ─────────────────────────────────</span>
+<span class="c1">#   - type: line</span>
+<span class="c1">#     points:</span>
+<span class="c1">#       - [55.0, -2.0]</span>
+<span class="c1">#       - [55.0,  8.0]</span>
+<span class="c1">#     color: cyan</span>
+<span class="c1">#     linewidth: 1.0</span>
+<span class="c1">#     linestyle: &quot;--&quot;       # default &quot;-&quot;</span>
+<span class="c1">#     label: &quot;Section A&quot;   # optional; placed at midpoint</span>
+<span class="c1">#     # time_on: 0</span>
+<span class="c1">#</span>
+<span class="c1">#   # ── directed arrow ────────────────────────────────────────────────────────</span>
+<span class="c1">#   - type: arrow</span>
+<span class="c1">#     from_lat: 55.0</span>
+<span class="c1">#     from_lon: 2.0</span>
+<span class="c1">#     to_lat: 57.0</span>
+<span class="c1">#     to_lon: 4.0</span>
+<span class="c1">#     color: white</span>
+<span class="c1">#     linewidth: 1.5</span>
+<span class="c1">#     label: &quot;&quot;             # optional; placed at midpoint</span>
+<span class="c1">#     # time_on: 0</span>
+
+<span class="c1"># ── matplotlib style ──────────────────────────────────────────────────────────</span>
+<span class="c1"># matplotlib loads its own config hierarchy automatically:</span>
+<span class="c1">#   1. ~/.config/matplotlib/matplotlibrc   — per-user (fonts, sizes, DPI, …)</span>
+<span class="c1">#   2. ./matplotlibrc in the CWD           — per-project</span>
+<span class="c1">#   3. style sheets in ~/.config/matplotlib/stylelib/</span>
+<span class="c1">#</span>
+<span class="c1"># Use the &#39;style&#39; key to select a named style or a .mplstyle file for this run:</span>
+<span class="c1"># style: seaborn-v0_8-paper</span>
+<span class="c1"># style: /path/to/custom.mplstyle</span>
+</code></pre></div></article></div></main>
+<footer class="foot"><div class="footin"><img src="../../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

@@ -1,0 +1,717 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Bias Correction of Atmospheric Forcings — User &amp; Technical Guide · ocean-* documentation</title>
+<meta name="description" content="Bias Correction of Atmospheric Forcings — User &amp; Technical Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="index.html" aria-current="page">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-prep</a></div><h1>Bias Correction of Atmospheric Forcings — User &amp; Technical Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-prep</h2><ul><li><a href="index.html">Overview</a></li><li><a href="model-setup.html">Model Setup Guide</a></li><li><a href="bathymetry.html">Bathymetry Guide</a></li><li><a href="boundaries-cmems.html">CMEMS Boundary Conditions Guide</a></li><li><a href="boundaries-cmip6.html">CMIP6 Boundary Conditions Guide</a></li><li><a href="tidal-boundaries.html">Tidal + CMIP6 mean boundary conditions</a></li><li><a href="delta-change-boundaries.html">Delta-change boundary conditions</a></li><li><a href="boundary-diagnostics.html">Boundary Diagnostics Guide</a></li><li><a href="initial-conditions.html">Initial Conditions Guide</a></li><li><a href="radiation-bc.html">Radiation Bias Correction Guide</a></li><li><a href="humidity-bc.html">Humidity Bias Correction Guide</a></li><li><a href="bias-correction-guide.html" aria-current="page">Bias Correction of Atmospheric Forcings — User &amp; Technical Guide</a></li></ul></aside><article class="doc"><h1 id="bias-correction-of-atmospheric-forcings--user--technical-guide">Bias Correction of Atmospheric Forcings — User &amp; Technical Guide</h1>
+<h2 id="1-purpose">1. Purpose</h2>
+<p>Ocean and coastal models are sensitive to the quality of their atmospheric
+forcing fields (air temperature, precipitation, radiation, wind).  Global
+Climate Models (GCMs) reproduce the large-scale climate well but contain
+<strong>systematic biases</strong> relative to observations — a GCM may be consistently
+too warm in winter or too dry in summer over a given region.  If those biases
+are left uncorrected they propagate into the ocean model as spurious trends
+or drifts.</p>
+<p>This tool corrects the bias in a GCM's future projections so that the
+corrected climatology matches an observational reference (e.g. ERA5) over
+a historical calibration period.</p>
+<hr />
+<h2 id="2-scientific-background">2. Scientific Background</h2>
+<h3 id="21-what-is-bias-correction">2.1 What is bias correction?</h3>
+<p>Let:</p>
+<ul>
+<li><strong>ref</strong>: observed reference (ERA5) over the calibration period</li>
+<li><strong>hist</strong>: GCM historical simulation over the same calibration period</li>
+<li><strong>future</strong>: GCM future projection to be corrected</li>
+</ul>
+<p>All three are compared <strong>per calendar month</strong> (January with January, etc.)
+so that the seasonal cycle of bias is captured rather than a single annual
+mean correction.</p>
+<h3 id="22-three-methods">2.2 Three methods</h3>
+<h4 id="delta-method-delta">Delta method (<code>delta</code>)</h4>
+<p>Computes the difference (or ratio) between the observed and modelled
+climatological mean and adds it to the future:</p>
+<ul>
+<li>
+<p>Additive (<code>+</code>, temperature):
+  <code>future_bc = future + (mean(ref) − mean(hist))</code></p>
+</li>
+<li>
+<p>Multiplicative (<code>*</code>, precipitation):
+  <code>future_bc = future × (mean(ref) / mean(hist))</code></p>
+</li>
+</ul>
+<p><strong>Strengths</strong>: fast, simple, preserves the model's internal variability.
+<strong>Weaknesses</strong>: only corrects the mean; variance and extremes are unchanged.</p>
+<h4 id="quantile-mapping-qm">Quantile Mapping (<code>qm</code>)</h4>
+<p>Transfers the full empirical CDF of <code>hist</code> onto the CDF of <code>ref</code>, then
+applies the same transfer function to <code>future</code>:</p>
+<ol>
+<li>For each quantile <em>q</em>, find the value <code>v_hist(q)</code> in <code>hist</code> and <code>v_ref(q)</code> in <code>ref</code>.</li>
+<li>Build a mapping: <code>v_hist → v_ref</code>.</li>
+<li>For each future value <em>x</em>, look up its quantile in <code>hist</code>, then apply the mapping.</li>
+</ol>
+<p><strong>Strengths</strong>: corrects the full distribution (mean, variance, extremes).
+<strong>Weaknesses</strong>: distorts long-term trends in the future projection when future
+values fall outside the historical range.  Not recommended for multi-decadal
+projections.</p>
+<h4 id="quantile-delta-mapping-qdm-recommended">Quantile Delta Mapping (<code>qdm</code>, recommended)</h4>
+<p>The method of Cannon et al. (2015).  Preserves the GCM's change at each
+quantile while correcting the distributional shape:</p>
+<ol>
+<li>Find the quantile <em>q</em> of each future value within the future CDF — of a
+   30-year moving window around the value's year (<code>window_years</code>, moved in
+   10-year steps, <code>step_years</code>), after removing the window's linear trend
+   (as in ISIMIP3BASD, Lange 2019).</li>
+<li>Look up the corresponding historical value: <code>v_hist(q)</code>.</li>
+<li>Look up the corresponding reference value: <code>v_ref(q)</code>.</li>
+<li>Apply the delta (additive or multiplicative) from hist to ref at that
+   quantile, scaled by the future value:</li>
+</ol>
+<ul>
+<li>Additive: <code>future_bc = future + (v_ref(q) − v_hist(q))</code></li>
+<li>Multiplicative: <code>future_bc = future × (v_ref(q) / v_hist(q))</code></li>
+</ul>
+<p>Correct the whole future period in one run: the windows are taken within
+the period given (a period shorter than the window is one window, with a
+warning).</p>
+<p><strong>Strengths</strong>: preserves the GCM's climate change signal at every quantile;
+corrects both mean and distribution shape.
+<strong>Weaknesses</strong>: more compute-intensive than delta; requires a sufficient
+sample size per calendar month.</p>
+<p><strong><code>qdm_v1</code></strong> is the kernel that was called <code>qdm</code> before 2026-11. It ranked
+future values in the <em>historical</em> CDF (step 1), which makes it quantile
+mapping: the model change is scaled by roughly σ_ref/σ_hist and per-cell
+changes are distorted (GFDL-ESM4 ssp126 tas, NSe domain: cell changes
+−2.1…+1.2 K against the model's −1.3…+0.4 K). Kept only to reproduce old
+products. Output files record the method in the <code>bias_correction_method</code>
+attribute.</p>
+<p><strong>Reference</strong>: Cannon, A.J., Sobie, S.R. and Murdock, T.Q., 2015. Bias
+correction of GCM precipitation by Quantile Delta Mapping. <em>Journal of
+Climate</em>, 28(17), pp.6938–6959.</p>
+<h3 id="23-temporal-disaggregation-optional">2.3 Temporal disaggregation (optional)</h3>
+<p>CMIP6 models typically provide output at monthly or daily resolution.
+Ocean models often require hourly or 3-hourly forcing.  The disaggregation
+step reconstructs the sub-daily signal by adding the ERA5 climatological
+diurnal cycle to each corrected daily value.</p>
+<p><strong>Algorithm</strong> (additive, e.g. temperature):</p>
+<ol>
+<li>
+<p>For each ERA5 calibration hour, compute the anomaly from the daily mean:
+   <code>anom(t) = ERA5(t) − daily_mean(ERA5)(day_of(t))</code></p>
+</li>
+<li>
+<p>Average anomalies over all years grouped by (day-of-year, hour-of-day)
+   to produce a <code>(365, n_steps)</code> climatological diurnal signal. The day of
+   year is counted on a 365-day calendar (from month and day; 29 February
+   shares 28 February's slot), so a calendar date has the same slot in
+   every year and for models without leap days.</p>
+</li>
+<li>
+<p>Apply a circular 31-day smoothing window (centred on each DOY) to reduce
+   noise.</p>
+</li>
+<li>
+<p>For each corrected daily value, repeat it <code>n_steps</code> times and add the
+   climatological anomaly for the matching (DOY, hour):
+   <code>hourly_bc(day, h) = daily_bc(day) + clim_anom(DOY(day), h)</code></p>
+</li>
+</ol>
+<p>Each day runs from 00:00 to 23:00 whatever the time stamp of the daily
+   value (CMIP6 <code>day</code> data is stamped at 12:00; before 2026-11 the hours
+   were counted from that stamp, shifting the diurnal cycle by 12 hours for
+   every noon-stamped variable). Output is on the real calendar: for models
+   without leap days, 29 February is inserted as the mean of 28 February
+   and 1 March (to match the tidal boundaries).</p>
+<p><strong>Daily mean is preserved by construction</strong>: the anomalies sum to zero over
+the day, so averaging the disaggregated hourly values recovers the original
+corrected daily value exactly.</p>
+<p>Multiplicative disaggregation (e.g. shortwave radiation) uses ratios instead
+of anomalies; the night-time ratio is set to zero.</p>
+<hr />
+<h2 id="3-workflow">3. Workflow</h2>
+<div class="codehilite"><pre><span></span><code>ERA5 (ref, hourly or daily)
+        │
+        ├── CMIP6 historical (hist, monthly Amon)
+        │        │
+        │        └── regrid hist &amp; future → ERA5 grid
+        │
+        ├── CMIP6 future / ssp245 (future, monthly Amon)
+        │
+        └── bias_correct_forcings.py
+                │
+                ├── [correct]     → {var}_bc_{year}.nc   (daily, corrected)
+                └── [disaggregate]→ {var}_bc_disagg_{year}.nc (hourly, corrected)
+</code></pre></div>
+
+<p>Steps can be run together or separately with <code>--steps</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Step 1: bias correction only (fast, ~minutes)</span>
+python<span class="w"> </span>python/bias_correct_forcings.py<span class="w"> </span>--config<span class="w"> </span>bc.yaml<span class="w"> </span>--steps<span class="w"> </span>correct
+
+<span class="c1"># Step 2: temporal disaggregation only (reads existing *_bc_*.nc files)</span>
+python<span class="w"> </span>python/bias_correct_forcings.py<span class="w"> </span>--config<span class="w"> </span>bc.yaml<span class="w"> </span>--steps<span class="w"> </span>disaggregate
+
+<span class="c1"># Both in one go (default)</span>
+python<span class="w"> </span>python/bias_correct_forcings.py<span class="w"> </span>--config<span class="w"> </span>bc.yaml
+</code></pre></div>
+
+<hr />
+<h2 id="4-configuration-reference">4. Configuration Reference</h2>
+<p>The YAML configuration controls every aspect of the run.</p>
+<h3 id="41-calibration-and-future-periods">4.1 Calibration and future periods</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">calibration</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1990-01-01&quot;</span><span class="w">   </span><span class="c1"># ERA5 and CMIP6 historical must cover this range</span>
+<span class="w">  </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2014-12-31&quot;</span><span class="w">   </span><span class="c1"># NOT later than this: CMIP6&#39;s `historical` experiment is a</span>
+<span class="w">                         </span><span class="c1"># fixed, protocol-bounded 1850-2014 for every model, no</span>
+<span class="w">                         </span><span class="c1"># exceptions (Eyring et al. 2016). A later end date doesn&#39;t</span>
+<span class="w">                         </span><span class="c1"># error -- it silently truncates the CMIP6 (hist) side of</span>
+<span class="w">                         </span><span class="c1"># the QDM fit while ERA5 (ref) still uses the full window,</span>
+<span class="w">                         </span><span class="c1"># an asymmetric calibration baseline that bakes in a</span>
+<span class="w">                         </span><span class="c1"># spurious &quot;model bias&quot; from whatever real trend exists in</span>
+<span class="w">                         </span><span class="c1"># the extra ref-only years. Real incident: this file</span>
+<span class="w">                         </span><span class="c1"># previously showed &quot;2019-12-31&quot; here, which is exactly</span>
+<span class="w">                         </span><span class="c1"># this bug, undetected in production for months.</span>
+
+<span class="nt">future</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2020-01-01&quot;</span><span class="w">   </span><span class="c1"># CMIP6 SSP scenario data needed from here</span>
+<span class="w">  </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2099-12-31&quot;</span>
+</code></pre></div>
+
+<h3 id="42-spatial-domain">4.2 Spatial domain</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">domain</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-20.0</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">45.0</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">75.0</span>
+</code></pre></div>
+
+<p>All datasets are spatially subsetted before correction.  Coordinates may be
+provided in either −180..180 or 0..360 convention; the tool normalises
+internally.</p>
+<h3 id="43-variables-and-correction-kind">4.3 Variables and correction kind</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tas</span><span class="w">    </span><span class="c1"># 2-m air temperature</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;+&quot;</span><span class="w">    </span><span class="c1"># additive: bc = future + (ref_mean − hist_mean at each quantile)</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pr</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;*&quot;</span><span class="w">    </span><span class="c1"># multiplicative: bc = future × (ref_mean / hist_mean)</span>
+</code></pre></div>
+
+<p><code>kind</code> defaults to <code>"+"</code> for temperature-like names (<code>tas</code>, <code>t2m</code>, <code>uas</code>,
+<code>vas</code>) and <code>"*"</code> for precipitation-like names (<code>pr</code>, <code>tp</code>, <code>rsds</code>).</p>
+<h3 id="44-correction-method">4.4 Correction method</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">correction</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">qdm</span><span class="w">          </span><span class="c1"># &#39;delta&#39; | &#39;qm&#39; | &#39;qdm&#39; | &#39;qdm_v1&#39; (legacy)</span>
+<span class="w">  </span><span class="nt">n_quantiles</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span><span class="w">     </span><span class="c1"># quantile bins for qm/qdm; ignored by delta</span>
+<span class="w">  </span><span class="nt">window_years</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span><span class="w">     </span><span class="c1"># qdm: moving window for the future ranks</span>
+<span class="w">  </span><span class="nt">step_years</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">       </span><span class="c1"># qdm: window step</span>
+</code></pre></div>
+
+<p><strong>Rule of thumb for <code>n_quantiles</code></strong>: use at most one quantile per ~5
+calibration samples per calendar month.  With 30 years of daily data you
+have ~900 samples/month; <code>n_quantiles=100</code> is fine.  With monthly data
+you have only 30 samples; use <code>n_quantiles=20</code> or switch to <code>delta</code>.</p>
+<h3 id="45-reference-era5">4.5 Reference (ERA5)</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">reference</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;/data/ERA5/tas_{year}.nc&quot;</span><span class="w">   </span><span class="c1"># {year} is replaced for each year</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">t2m</span><span class="w">                         </span><span class="c1"># variable name inside the file</span>
+
+<span class="w">  </span><span class="nt">rsds</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;/data/ERA5/ssrd_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssrd</span>
+<span class="w">    </span><span class="nt">scale_factor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.000277778</span><span class="w">             </span><span class="c1"># J/m² → W/m²  (ERA5 hourly accum ÷ 3600)</span>
+</code></pre></div>
+
+<p><strong>Unit conversion</strong> (<code>scale_factor</code>): ERA5 radiation variables (<code>ssrd</code>, <code>strd</code>)
+and precipitation (<code>tp</code>) are stored as hourly accumulations in J/m² and m
+respectively, whereas CMIP6 provides instantaneous fluxes in W/m² and
+kg/m²/s.  Add <code>scale_factor: 0.000277778</code> (= 1/3600) to any ERA5 reference or
+disaggregation block that needs this conversion.  The factor is applied to the
+ERA5 data immediately after loading, before regridding and bias correction.
+The same key is supported in the <code>disaggregation.variables</code> blocks.</p>
+<p>The reference can also be loaded from Copernicus Marine Service:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">reference</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">copernicus</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;copernicus://cmems_obs-sl_glo_phy-ssh_nrt_allsat-l4-duacs-0.25deg_P1D&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">adt</span>
+</code></pre></div>
+
+<h3 id="46-cmip6-historical-and-future">4.6 CMIP6 historical and future</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">historical</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/historical/tas/Amon/r1i1p1f1&quot;</span>
+
+<span class="nt">future_model</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/ssp245/tas/Amon/r1i1p1f1&quot;</span>
+</code></pre></div>
+
+<p>CMIP6 data is downloaded from the PANGEO Google Cloud catalog on first use
+and cached locally.  Requires <code>intake</code>, <code>intake-esm</code>, and <code>gcsfs</code>:</p>
+<div class="codehilite"><pre><span></span><code>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span>intake<span class="w"> </span>intake-esm<span class="w"> </span>gcsfs
+</code></pre></div>
+
+<p>URI format: <code>cmip6://&lt;source_id&gt;/&lt;experiment_id&gt;/&lt;variable_id&gt;/&lt;table_id&gt;/&lt;member_id&gt;</code></p>
+<h3 id="47-temporal-disaggregation">4.7 Temporal disaggregation</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">disaggregation</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">smooth_window</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15</span><span class="w">    </span><span class="c1"># DOY-smoothing half-width in days (0 to disable)</span>
+<span class="w">  </span><span class="nt">clim_years</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w">      </span><span class="c1"># use only last N years of calibration for climatology</span>
+<span class="w">                       </span><span class="c1"># (reduces memory; 3–5 years is sufficient)</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">tas</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;/data/ERA5/hourly/t2m_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">t2m</span>
+<span class="w">    </span><span class="nt">rsds</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;/data/ERA5/hourly/ssrd_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssrd</span>
+</code></pre></div>
+
+<p>Only variables listed under <code>variables:</code> are disaggregated.  Others receive
+only the daily bias-corrected output.</p>
+<p><strong>Memory note</strong>: the <code>clim_years</code> parameter limits how many years of ERA5
+sub-daily data are loaded for building the diurnal climatology.  5 years of
+hourly ERA5 on a 101×201 grid requires ~7 GB.  Loading 30 years would
+require ~42 GB; 3–5 years is climatologically sufficient.</p>
+<h3 id="48-cache">4.8 Cache</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">cache</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/data/kb/cache&quot;</span>
+</code></pre></div>
+
+<p>CMIP6 data downloaded from PANGEO is cached as compressed NetCDF4.
+Subsequent runs use the cached file instead of re-downloading (~30 s saved
+per variable).  Cache files are named by a hash of the source URI, domain,
+and time range.</p>
+<h3 id="49-output">4.9 Output</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">dir</span><span class="p">:</span><span class="w">                  </span><span class="s">&quot;./bc_output/MPI-ESM1-2-HR_ssp245&quot;</span>
+
+<span class="w">  </span><span class="c1"># ── Year-by-year output (default, clim_period: 1) ──────────────────────</span>
+<span class="w">  </span><span class="nt">filename_pattern</span><span class="p">:</span><span class="w">      </span><span class="s">&quot;{variable}_bc_{year}.nc&quot;</span>
+<span class="w">  </span><span class="nt">disaggregated_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{variable}_bc_disagg_{year}.nc&quot;</span>
+
+<span class="w">  </span><span class="c1"># ── Multi-year chunk output ──────────────────────────────────────────────</span>
+<span class="w">  </span><span class="c1"># clim_period &gt; 1 groups N years into one file instead of one file per year.</span>
+<span class="w">  </span><span class="c1"># Windows are aligned to multiples of N from year 0:</span>
+<span class="w">  </span><span class="c1">#   clim_period: 10  → 2020–2029, 2030–2039, …</span>
+<span class="w">  </span><span class="c1">#   clim_period: 5   → 2020–2024, 2025–2029, …</span>
+<span class="w">  </span><span class="c1"># All daily (or sub-daily) timesteps are written; no averaging is applied.</span>
+<span class="w">  </span><span class="nt">clim_period</span><span class="p">:</span><span class="w">           </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">     </span><span class="c1"># 1 = year-by-year (default)</span>
+<span class="w">  </span><span class="nt">chunk_pattern</span><span class="p">:</span><span class="w">         </span><span class="s">&quot;{variable}_bc_{start}-{end}.nc&quot;</span>
+<span class="w">  </span><span class="nt">disagg_chunk_pattern</span><span class="p">:</span><span class="w">  </span><span class="s">&quot;{variable}_bc_disagg_{start}-{end}.nc&quot;</span>
+
+<span class="w">  </span><span class="nt">compress</span><span class="p">:</span><span class="w">             </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">   </span><span class="c1"># zlib level-4</span>
+</code></pre></div>
+
+<p>When <code>clim_period: 1</code> (the default), one file per year is written using
+the <code>filename_pattern</code> / <code>disaggregated_pattern</code> templates.</p>
+<p>When <code>clim_period: N</code> with <code>N &gt; 1</code>, all daily (or sub-daily) timesteps for
+N years are bundled into one file.  Windows are anchored at multiples of N
+— e.g. <code>clim_period: 10</code> with a future period of 2020–2099 produces ten
+files containing 10 years each: <code>2020-2029.nc</code>, <code>2030-2039.nc</code>, …,
+<code>2090-2099.nc</code>.  A partial window at either edge (e.g. if the future period
+starts in 2022) contains however many years of data are available.</p>
+<hr />
+<h2 id="5-command-line-reference">5. Command-Line Reference</h2>
+<h3 id="bc-correct-bias-correction--disaggregation"><code>bc correct</code> (bias correction + disaggregation)</h3>
+<div class="codehilite"><pre><span></span><code>bc correct  --config PATH [OPTIONS]
+bc-correct  --config PATH [OPTIONS]          # alias
+
+Required:
+  --config PATH           Path to YAML configuration file
+
+Optional:
+  --variable VAR [VAR …]  Process only these variables (default: all in config)
+  --method {delta,qm,qdm,qdm_v1} Override correction method from config
+  --n-quantiles N         Override n_quantiles from config
+  --steps {correct,disaggregate} [...]
+                          Run only the listed stages (default: both)
+                            correct      — bias correction → *_bc_*.nc
+                            disaggregate — temporal disaggregation → *_bc_disagg_*.nc
+  --dry-run               Load and validate data but do not write files
+  --verbose / -v          Enable DEBUG-level logging
+</code></pre></div>
+
+<h3 id="bc-diagnostics-calibration-quality-plots-and-statistics"><code>bc diagnostics</code> (calibration quality plots and statistics)</h3>
+<div class="codehilite"><pre><span></span><code>bc diagnostics  --config PATH [OPTIONS]
+bc-diagnostics  --config PATH [OPTIONS]      # alias
+
+Required:
+  --config PATH           Path to YAML configuration file
+
+Optional:
+  --variable VAR [VAR …]  Process only these variables (default: all in config)
+  --output-dir DIR        Override output directory (default: analyses/scenarios/)
+  --dry-run               Compute statistics but do not write any files
+  --verbose / -v          Enable DEBUG-level logging
+</code></pre></div>
+
+<hr />
+<h2 id="6-practical-tips">6. Practical Tips</h2>
+<h3 id="choosing-a-correction-method">Choosing a correction method</h3>
+<table>
+<thead>
+<tr>
+<th>Scenario</th>
+<th>Recommended method</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Quick test or delta-only forcing</td>
+<td><code>delta</code></td>
+</tr>
+<tr>
+<td>Correcting a historical reanalysis period</td>
+<td><code>qm</code></td>
+</tr>
+<tr>
+<td>Future projections (2020–2100)</td>
+<td><code>qdm</code></td>
+</tr>
+<tr>
+<td>Monthly reference data only</td>
+<td><code>delta</code> (too few samples for quantile methods)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="calibration-period-length">Calibration period length</h3>
+<p>A 20–30 year calibration period is standard practice.  Shorter periods
+(&lt; 10 years) can give noisy quantile estimates, especially for extremes.</p>
+<h3 id="reference-data-resolution">Reference data resolution</h3>
+<p>Match the reference to the model's resolution: for daily CMIP6 data use a
+daily reference (<code>resample: daily</code>, or <code>daily_sum</code> for accumulations).</p>
+<ul>
+<li><strong>Hourly ERA5 against daily model data</strong>: wrong. The corrected daily values
+  get the spread of single hours, and disaggregation then adds the diurnal
+  cycle on top. NSe domain, ERA5 1990–2014: spread +6–14 % for tas (summer
+  highest), +9–11 % for uas/vas, +3 % for psl; 1 %/99 % tails shifted by
+  1–2 K for tas (single cells up to 7 K). It also needs ~70 GB of memory
+  for tas.</li>
+<li><strong>Daily ERA5</strong>: ~775 samples per calendar month over 25 years — ample for
+  <code>qdm</code> with <code>n_quantiles: 100</code>.</li>
+<li><strong>Monthly ERA5</strong>: only 25–30 samples/month; use <code>delta</code> or reduce <code>n_quantiles</code> to ~20.</li>
+</ul>
+<h3 id="running-steps-separately">Running steps separately</h3>
+<p>Run <code>--steps correct</code> first to validate the bias correction output, then
+run <code>--steps disaggregate</code> to add the diurnal cycle.  This avoids repeating
+the expensive CMIP6 download and regridding if disaggregation parameters
+need adjustment.</p>
+<h3 id="memory-usage">Memory usage</h3>
+<table>
+<thead>
+<tr>
+<th>Stage</th>
+<th>Dominant cost</th>
+<th>Typical peak</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bias correction</td>
+<td>ERA5 ref per calendar month</td>
+<td>~3–5 GB</td>
+</tr>
+<tr>
+<td>Disaggregation (clim_years=5)</td>
+<td>ERA5 hourly anomaly array</td>
+<td>~7 GB</td>
+</tr>
+<tr>
+<td>Disaggregation (clim_years=30)</td>
+<td>ERA5 hourly anomaly array</td>
+<td>~42 GB</td>
+</tr>
+</tbody>
+</table>
+<p>Set <code>clim_years: 3</code> in the YAML if memory is constrained.</p>
+<hr />
+<h2 id="7-output-file-conventions">7. Output File Conventions</h2>
+<p>Each output file contains a single variable with:</p>
+<ul>
+<li><code>time</code>: daily timestamps (bias-corrected) or hourly/3-hourly (disaggregated)</li>
+<li><code>lat</code>, <code>lon</code> (or whatever coordinate names the reference grid uses)</li>
+<li><code>bias_correction_method</code> attribute on the variable</li>
+<li><code>disaggregation</code> attribute describing ERA5 source and parameters (if disaggregated)</li>
+</ul>
+<p>The output grid matches the <strong>reference (ERA5) grid</strong>, not the original CMIP6
+grid, because CMIP6 data is regridded to the ERA5 grid before correction.</p>
+<hr />
+<h2 id="8-dependencies">8. Dependencies</h2>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>xarray</code></td>
+<td>n-D labelled arrays</td>
+</tr>
+<tr>
+<td><code>numpy</code></td>
+<td>numerical kernels</td>
+</tr>
+<tr>
+<td><code>dask</code></td>
+<td>lazy / chunked loading of large ERA5 files</td>
+</tr>
+<tr>
+<td><code>xesmf</code></td>
+<td>regridding (CMIP6 → ERA5 grid)</td>
+</tr>
+<tr>
+<td><code>intake</code>, <code>intake-esm</code>, <code>gcsfs</code></td>
+<td>CMIP6 download from PANGEO</td>
+</tr>
+<tr>
+<td><code>copernicusmarine</code></td>
+<td>Copernicus Marine Service download</td>
+</tr>
+<tr>
+<td><code>pyyaml</code></td>
+<td>configuration parsing</td>
+</tr>
+</tbody>
+</table>
+<p>Install the full environment:</p>
+<div class="codehilite"><pre><span></span><code>conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment.yml
+conda<span class="w"> </span>activate<span class="w"> </span>stats
+</code></pre></div>
+
+<hr />
+<h2 id="9-diagnostics--bc-diagnostics">9. Diagnostics — <code>bc diagnostics</code></h2>
+<p><code>bc diagnostics</code> evaluates calibration quality and produces a standard set of
+plots and statistics <strong>without</strong> running the bias correction itself.  It reads
+the same YAML as <code>bc correct</code> and is designed to be run after correction to
+verify the results look sensible before using the corrected files in a
+simulation.</p>
+<h3 id="91-what-it-produces">9.1 What it produces</h3>
+<p>For each variable × SSP scenario combination, four PNG plots and one text
+statistics file are written:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>calibration_maps_{scenario}.png</code></td>
+<td>Three-panel map: reference mean | CMIP6 raw mean | bias</td>
+</tr>
+<tr>
+<td><code>seasonal_cycle_{scenario}.png</code></td>
+<td>Monthly climatology: reference, CMIP6 raw, corrected future per decade</td>
+</tr>
+<tr>
+<td><code>future_trend_{scenario}.png</code></td>
+<td>Annual area-mean of corrected future with linear trend</td>
+</tr>
+<tr>
+<td><code>monthly_breakdown_{scenario}.png</code></td>
+<td>Heatmap of corrected future monthly means by decade</td>
+</tr>
+<tr>
+<td><code>statistics_{scenario}.txt</code></td>
+<td>RMSE, bias, MAE, correlation per calendar month + overall</td>
+</tr>
+</tbody>
+</table>
+<p><code>{scenario}</code> encodes both the SSP identifier and the regridding method,
+e.g. <code>ssp245_bilinear</code>.  This string also appears in every plot title so
+figures are self-describing.</p>
+<h3 id="92-output-layout">9.2 Output layout</h3>
+<p>Diagnostics are <strong>not area-specific</strong> — they characterise the atmospheric
+forcing, which is the same input regardless of which ocean domain is modelled.
+Outputs therefore live at the top level of the analyses tree:</p>
+<div class="codehilite"><pre><span></span><code>analyses/
+└── scenarios/
+    ├── plots/
+    │   └── &lt;variable&gt;/           e.g. tas, pr, rsds
+    │       ├── calibration_maps_ssp245_bilinear.png
+    │       ├── seasonal_cycle_ssp245_bilinear.png
+    │       ├── future_trend_ssp245_bilinear.png
+    │       └── monthly_breakdown_ssp245_bilinear.png
+    └── tables/
+        └── &lt;variable&gt;/
+            └── statistics_ssp245_bilinear.txt
+</code></pre></div>
+
+<p>The path is controlled by <code>output.base_dir</code> in the YAML (default <code>./analyses</code>).
+Add this key to any existing <code>bc correct</code> config:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">base_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./analyses</span><span class="w">          </span><span class="c1"># diagnostics go to analyses/scenarios/</span>
+<span class="w">  </span><span class="nt">dir</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">./bc_output/…</span><span class="w">       </span><span class="c1"># corrected NetCDF files (bc correct only)</span>
+</code></pre></div>
+
+<h3 id="93-spatial-masking-for-ocean-only-reference-data">9.3 Spatial masking for ocean-only reference data</h3>
+<p>Some forcing variables (e.g. NDEP nitrogen deposition fluxes) provide
+observations <strong>only over water</strong>.  CMIP6 models produce output everywhere,
+so a naive area mean of the model would include land cells that the reference
+does not, making the comparison meaningless.</p>
+<p><code>bc diagnostics</code> automatically derives a <strong>water mask</strong> from the reference:</p>
+<div class="codehilite"><pre><span></span><code>ref_valid = ref.notnull().any(&#39;time&#39;)
+</code></pre></div>
+
+<p>All area means — for CMIP6 historical and for the corrected future — are then
+computed only over cells where <code>ref_valid</code> is True.  This applies to every
+variable, so for standard meteorological variables (ERA5 covers the full
+domain) it has no effect, while for ocean-only references it ensures the
+comparison is grid-cell-for-grid-cell.</p>
+<p><strong>No config change is needed</strong>: the masking is always active.</p>
+<h3 id="94-regridding-method">9.4 Regridding method</h3>
+<p>The regridding method recorded in <code>regridding.method</code> (default <code>bilinear</code>)
+determines the CMIP6→ERA5 interpolation and is embedded in all output
+filenames and plot titles as part of <code>{scenario}</code>.  To compare methods:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Run 1</span>
+<span class="nt">regridding</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bilinear</span>
+
+<span class="c1"># Run 2</span>
+<span class="nt">regridding</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conservative</span>
+</code></pre></div>
+
+<p>The two runs produce separate files (<code>ssp245_bilinear.png</code>,
+<code>ssp245_conservative.png</code>) so results can be compared side by side.</p>
+<h3 id="95-minimal-diagnostics-only-config">9.5 Minimal diagnostics-only config</h3>
+<p>If you only want diagnostics and already have corrected files:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">calibration</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1990-01-01&quot;</span>
+<span class="w">  </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2014-12-31&quot;</span><span class="w">   </span><span class="c1"># CMIP6 historical&#39;s hard ceiling -- see §4.1 for why</span>
+
+<span class="nt">future</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2020-01-01&quot;</span>
+<span class="w">  </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2099-12-31&quot;</span>
+
+<span class="nt">domain</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-20.0</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">45.0</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">75.0</span>
+
+<span class="nt">regridding</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bilinear</span>
+
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">scenario</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssp245</span>
+
+<span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tas</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pr</span>
+
+<span class="nt">reference</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;/data/ERA5/t2m_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">t2m</span>
+<span class="w">  </span><span class="nt">pr</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;/data/ERA5/tp_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tp</span>
+
+<span class="nt">historical</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/historical/tas/Amon/r1i1p1f1&quot;</span>
+<span class="w">  </span><span class="nt">pr</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/historical/pr/Amon/r1i1p1f1&quot;</span>
+
+<span class="nt">future_model</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/ssp245/tas/Amon/r1i1p1f1&quot;</span>
+<span class="w">  </span><span class="nt">pr</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/ssp245/pr/Amon/r1i1p1f1&quot;</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">base_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./analyses</span><span class="w">          </span><span class="c1"># → analyses/scenarios/plots/tas/ etc.</span>
+<span class="w">  </span><span class="nt">dir</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">./bc_output/…</span><span class="w">       </span><span class="c1"># where the *_bc_*.nc files live (read by diagnostics)</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>bc<span class="w"> </span>diagnostics<span class="w"> </span>--config<span class="w"> </span>bc.yaml
+bc<span class="w"> </span>diagnostics<span class="w"> </span>--config<span class="w"> </span>bc.yaml<span class="w"> </span>--variable<span class="w"> </span>tas<span class="w"> </span>pr<span class="w">   </span><span class="c1"># subset</span>
+bc<span class="w"> </span>diagnostics<span class="w"> </span>--config<span class="w"> </span>bc.yaml<span class="w"> </span>--dry-run<span class="w">           </span><span class="c1"># statistics only, no plots</span>
+</code></pre></div>
+
+<hr />
+<h2 id="10-custom-analysis-periods--period_label">10. Custom Analysis Periods — <code>period_label</code></h2>
+<p>All validation scripts (and the output directory structure) use a <strong>period
+string</strong> as a subdirectory name:</p>
+<div class="codehilite"><pre><span></span><code>analyses/areas/&lt;Area&gt;/validations/&lt;Exp&gt;/plots/&lt;model&gt;/&lt;period&gt;/&lt;type&gt;/
+</code></pre></div>
+
+<p>By default this is auto-generated from <code>year</code> or <code>years</code> in the config:</p>
+<table>
+<thead>
+<tr>
+<th>Config key</th>
+<th>Period string</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>year: 2016</code></td>
+<td><code>2016</code></td>
+</tr>
+<tr>
+<td><code>years: [2016, 2023]</code></td>
+<td><code>2016-2023</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="adding-a-custom-label">Adding a custom label</h3>
+<p>Set <code>period_label</code> to any string that starts with a 4-digit year:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">years</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2016</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2023</span><span class="p p-Indicator">]</span>
+<span class="nt">period_label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2016-2023-DJF&quot;</span><span class="w">      </span><span class="c1"># winter months only</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code><span class="nt">years</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2019</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2021</span><span class="p p-Indicator">]</span>
+<span class="nt">period_label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2019-2021-storm&quot;</span><span class="w">     </span><span class="c1"># storm-track sub-analysis</span>
+</code></pre></div>
+
+<p>The label is used verbatim as the period directory name.  The reference year
+for <code>{year}</code> path templates is taken from <code>years[0]</code> (or <code>year</code>) as normal.</p>
+<h3 id="constraints">Constraints</h3>
+<ul>
+<li>Must start with <code>YYYY</code> — required so <code>AnalysesLayout.iter_plot_dirs()</code>
+  recognises the directory as a period rather than a model name.</li>
+<li>No spaces (use <code>-</code> or <code>_</code> as separators).</li>
+<li>Keep labels short: they appear in directory paths and report headings.</li>
+</ul>
+<h3 id="typical-use-case">Typical use case</h3>
+<p>Run a full-period analysis first, then add a seasonal or event-specific
+analysis without overwriting the original:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Full period</span>
+<span class="nt">years</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2016</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2023</span><span class="p p-Indicator">]</span>
+<span class="c1"># → plots/pyGETM/2016-2023/surface/</span>
+
+<span class="c1"># Winter sub-analysis (DJF only — add time_filter to subset months)</span>
+<span class="nt">years</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2016</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2023</span><span class="p p-Indicator">]</span>
+<span class="nt">period_label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2016-2023-DJF&quot;</span>
+<span class="c1"># → plots/pyGETM/2016-2023-DJF/surface/</span>
+</code></pre></div>
+
+<p>Both sets of plots coexist under the same experiment directory and are
+discovered automatically by the reporter and <code>manage-analyses</code> tools.</p></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

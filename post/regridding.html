@@ -1,0 +1,799 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Regridding User Guide · ocean-* documentation</title>
+<meta name="description" content="Regridding User Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="index.html" aria-current="page">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-post</a></div><h1>Regridding User Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-post</h2><ul><li><a href="index.html">Overview</a></li><li><a href="run-validation.html">run-analyses Guide</a></li><li><a href="gridded-2d-validation.html">Gridded 2D Validation Guide</a></li><li><a href="gridded-3d-validation.html">Gridded 3D Validation Guide</a></li><li><a href="profile-validation.html">Profile Validation Guide</a></li><li><a href="tidal-analysis.html">Tidal Analysis Guide</a></li><li><a href="mle-comparison.html">MLE Cross-Experiment Comparison Guide</a></li><li><a href="scenarios.html">Scenario Analysis Guide</a></li><li><a href="river-projection.html">River Flow and Nutrient Load Projection Guide</a></li><li><a href="regridding.html" aria-current="page">Regridding User Guide</a></li><li><a href="simulation-list.html">Simulation List Guide</a></li><li><a href="statistics-db.html">Statistics Database Guide</a></li><li><a href="manage-analyses.html">manage-analyses Guide</a></li><li><a href="reporting.html">Reporting Guide</a></li></ul></aside><article class="doc"><h1 id="regridding-user-guide">Regridding User Guide</h1>
+<p><code>ocean_data.regridding</code> provides xESMF-based regridding with automatic
+weight-file caching, domain subsetting, and coordinate name normalisation.
+The <code>regrid</code> command (<code>cli/regrid.py</code>) exposes the same functionality as a
+command-line tool. Import the API from <code>ocean_data.regridding</code>.</p>
+<hr />
+<h2 id="contents">Contents</h2>
+<ol>
+<li><a href="#1-introduction">Introduction</a></li>
+<li><a href="#2-installation-and-setup">Installation and setup</a></li>
+<li><a href="#3-command-line-interface">Command-line interface</a>
+   - <a href="#31-basic-usage">Basic usage</a>
+   - <a href="#32-selecting-variables">Selecting variables</a>
+   - <a href="#33-choosing-the-regrid-method">Choosing the regrid method</a>
+   - <a href="#34-the---target-variable-flag">The --target-variable flag</a>
+   - <a href="#35-weight-caching">Weight caching</a>
+   - <a href="#36-global-source-grids">Global source grids</a>
+   - <a href="#37-skipping-domain-subsetting">Skipping domain subsetting</a></li>
+<li><a href="#4-python-api">Python API</a>
+   - <a href="#41-regridmanager">RegridManager</a>
+   - <a href="#42-regrid">.regrid()</a>
+   - <a href="#43-subset_to_target_domain">.subset_to_target_domain()</a>
+   - <a href="#44-regrid_data">regrid_data()</a>
+   - <a href="#45-open_with_chunks">open_with_chunks()</a></li>
+<li><a href="#5-weight-caching">Weight caching</a></li>
+<li><a href="#6-regridding-methods">Regridding methods</a></li>
+<li><a href="#7-coordinate-name-handling">Coordinate name handling</a></li>
+<li><a href="#8-domain-subsetting">Domain subsetting</a></li>
+<li><a href="#9-unit-conversion">Unit conversion</a></li>
+<li><a href="#10-troubleshooting">Troubleshooting</a></li>
+</ol>
+<hr />
+<h2 id="1-introduction">1. Introduction</h2>
+<p>Regridding maps data from one spatial grid to another — for example
+interpolating a global 0.25° satellite observation product onto a regional
+1 km model grid, or the other way round, before computing validation
+statistics.</p>
+<p>You need regridding when:</p>
+<ul>
+<li>Source and target files have different spatial resolutions or projections.</li>
+<li>You want to compute point-by-point differences (RMSE, bias) between two
+  datasets that do not share a common grid.</li>
+<li>You are comparing a regional model against a global observation product and
+  only want the overlapping domain.</li>
+</ul>
+<p>This module provides:</p>
+<ul>
+<li><strong><code>RegridManager</code></strong> — full-featured class with weight caching, domain
+  subsetting, and automatic coordinate name handling.</li>
+<li><strong><code>regrid_data()</code></strong> — convenience one-liner for single-use regridding.</li>
+<li><strong><code>open_with_chunks()</code></strong> — helper to open a NetCDF file with Dask chunking
+  before passing it to the regridder.</li>
+<li><strong><code>regrid</code></strong> — CLI wrapper that reads source and target files,
+  regrids all (or selected) variables, and writes a NetCDF output file.</li>
+</ul>
+<hr />
+<h2 id="2-installation-and-setup">2. Installation and setup</h2>
+<p><strong>Core dependencies</strong> (always required):</p>
+<p>The <code>ocean-stack</code> conda env (see <code>../ocean-stack/environment.yml</code>) already
+installs xESMF/ESMF from conda-forge and all four <code>ocean-*</code> packages in
+editable mode:</p>
+<div class="codehilite"><pre><span></span><code>conda<span class="w"> </span>activate<span class="w"> </span>ocean-stack
+</code></pre></div>
+
+<p>xESMF depends on ESMF, which is most reliably installed via conda — if
+building an env manually rather than from <code>ocean-stack</code>:</p>
+<div class="codehilite"><pre><span></span><code>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span>esmf<span class="w"> </span>esmpy<span class="w"> </span>xesmf
+pip<span class="w"> </span>install<span class="w"> </span>xarray<span class="w"> </span>numpy
+</code></pre></div>
+
+<p><strong>Optional — Dask (for chunked/out-of-core processing):</strong></p>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>dask
+</code></pre></div>
+
+<p>If <code>xesmf</code> is not installed, importing <code>RegridManager</code> raises an <code>ImportError</code>
+with install instructions.  The module can still be imported; only calls that
+construct a <code>RegridManager</code> will fail.</p>
+<hr />
+<h2 id="3-command-line-interface">3. Command-line interface</h2>
+<p>Run <code>regrid --help</code> for a full flag listing.  All INFO
+messages go to stderr; only the xarray repr is printed to stdout.</p>
+<h3 id="31-basic-usage">3.1 Basic usage</h3>
+<p>Three arguments are always required: <code>--source</code>, <code>--target</code>, and <code>--output</code>.</p>
+<div class="codehilite"><pre><span></span><code>regrid<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--source<span class="w"> </span>/data/obs/sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--target<span class="w"> </span>/data/model/output.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>regridded_sst.nc
+</code></pre></div>
+
+<p>The source file is opened via <code>DataLoader</code> (supporting the same fallback
+time-decode chain as <code>ocean_data.data_loader</code>).  All data variables in the source
+file are regridded by default.  The target file is opened with plain
+<code>xr.open_dataset</code>; only its coordinates are used — target values are ignored.</p>
+<p>The output file is a NetCDF dataset with three extra global attributes
+recording provenance:</p>
+<div class="codehilite"><pre><span></span><code>regrid_method      bilinear
+regrid_source_file /data/obs/sst.nc
+regrid_target_file /data/model/output.nc
+</code></pre></div>
+
+<h3 id="32-selecting-variables">3.2 Selecting variables</h3>
+<p>By default every data variable in the source file is regridded.  Use
+<code>--variable</code> to restrict to one or more variables:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Single variable</span>
+regrid<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--source<span class="w"> </span>/data/obs/sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--target<span class="w"> </span>/data/model/output.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>regridded_sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--variable<span class="w"> </span>analysed_sst
+
+<span class="c1"># Multiple variables, comma-separated (no spaces around commas)</span>
+regrid<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--source<span class="w"> </span>/data/obs/ts_profiles.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--target<span class="w"> </span>/data/model/grid.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>regridded_ts.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--variable<span class="w"> </span>TEMP,PSAL
+</code></pre></div>
+
+<p>If a requested variable is not present in the source file the script exits
+with an error that lists the available names.</p>
+<h3 id="33-choosing-the-regrid-method">3.3 Choosing the regrid method</h3>
+<p>Use <code>--method</code> to select the interpolation algorithm.  The default is
+<code>bilinear</code>.</p>
+<div class="codehilite"><pre><span></span><code>regrid<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--source<span class="w"> </span>/data/obs/sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--target<span class="w"> </span>/data/model/output.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>regridded_sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--method<span class="w"> </span>conservative
+</code></pre></div>
+
+<p>See <a href="#6-regridding-methods">Regridding methods</a> for a full comparison.</p>
+<h3 id="34-the---target-variable-flag">3.4 The --target-variable flag</h3>
+<p>The CLI reads coordinate arrays from a variable in the target file.  By
+default it uses the first data variable it finds.  Use <code>--target-variable</code> to
+specify a different one — useful when the first variable has an unusual grid
+or when the target file contains multiple grids:</p>
+<div class="codehilite"><pre><span></span><code>regrid<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--source<span class="w"> </span>/data/obs/sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--target<span class="w"> </span>/data/model/multi_grid.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>regridded_sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--target-variable<span class="w"> </span>temperature
+</code></pre></div>
+
+<p>If the specified variable is not found the script exits with an error listing
+available names.</p>
+<h3 id="35-weight-caching">3.5 Weight caching</h3>
+<p>Weight files are stored in <code>./regrid_weights/</code> by default and reused
+automatically on subsequent calls with the same source/target grids and
+method.  Use <code>--cache-dir</code> to put them elsewhere, or <code>--no-cache</code> to disable
+caching entirely:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Custom cache directory</span>
+regrid<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--source<span class="w"> </span>/data/obs/sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--target<span class="w"> </span>/data/model/output.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>regridded_sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cache-dir<span class="w"> </span>/scratch/weights
+
+<span class="c1"># Disable caching (always recompute weights)</span>
+regrid<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--source<span class="w"> </span>/data/obs/sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--target<span class="w"> </span>/data/model/output.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>regridded_sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--no-cache
+</code></pre></div>
+
+<p>See <a href="#5-weight-caching">Weight caching</a> for details on how the cache key is
+computed.</p>
+<h3 id="36-global-source-grids">3.6 Global source grids</h3>
+<p>When the source grid wraps around the globe (e.g. OISST, ERA5), pass
+<code>--periodic</code> so xESMF treats the longitude boundary as periodic rather than
+as an open edge:</p>
+<div class="codehilite"><pre><span></span><code>regrid<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--source<span class="w"> </span>/data/global/oisst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--target<span class="w"> </span>/data/model/NS.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>oisst_on_NS_grid.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--periodic
+</code></pre></div>
+
+<p>Without <code>--periodic</code>, points near the dateline or prime meridian can be
+assigned <code>NaN</code> because xESMF does not look across the boundary.</p>
+<h3 id="37-skipping-domain-subsetting">3.7 Skipping domain subsetting</h3>
+<p>Before regridding, the source is automatically subset to the target domain
+plus a 2° buffer (see <a href="#8-domain-subsetting">Domain subsetting</a>).  Pass
+<code>--no-subset</code> to disable this step:</p>
+<div class="codehilite"><pre><span></span><code>regrid<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--source<span class="w"> </span>/data/obs/sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--target<span class="w"> </span>/data/model/output.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>regridded_sst.nc<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--no-subset
+</code></pre></div>
+
+<p>Use <code>--no-subset</code> if the source and target grids cover the same region (no
+memory saving is possible), or when subsetting produces edge artefacts with
+the conservative method near the domain boundary.</p>
+<hr />
+<h2 id="4-python-api">4. Python API</h2>
+<p><code>ocean_data</code> is an installed package (<code>pip install -e ../ocean-data</code>, see
+<code>../ocean-stack/environment.yml</code>), so a plain import is enough:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.regridding</span> <span class="kn">import</span> <span class="n">RegridManager</span><span class="p">,</span> <span class="n">regrid_data</span><span class="p">,</span> <span class="n">open_with_chunks</span>
+</code></pre></div>
+
+<h3 id="41-regridmanager">4.1 <code>RegridManager</code></h3>
+<p>The main class.  Instantiate once per session; the object holds the cache
+directory path and a <code>CoordinateMapper</code> instance that is reused across calls.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.regridding</span> <span class="kn">import</span> <span class="n">RegridManager</span>
+
+<span class="n">manager</span> <span class="o">=</span> <span class="n">RegridManager</span><span class="p">(</span>
+    <span class="n">cache_dir</span><span class="o">=</span><span class="s1">&#39;./regrid_weights&#39;</span><span class="p">,</span>   <span class="c1"># directory for weight files</span>
+    <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>                   <span class="c1"># print progress messages</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p><strong>Constructor parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cache_dir</code></td>
+<td>str</td>
+<td><code>~/.cache/ocean-data/regridding</code></td>
+<td>Directory where weight NetCDF files are stored. Created automatically if absent. The <code>regrid</code> CLI overrides this default to <code>./regrid_weights</code> via its own <code>--cache-dir</code> flag.</td>
+</tr>
+<tr>
+<td><code>verbose</code></td>
+<td>bool</td>
+<td><code>True</code></td>
+<td>Enable INFO-level progress output.</td>
+</tr>
+</tbody>
+</table>
+<p><code>RegridManager</code> raises <code>ImportError</code> at construction time if xESMF is not
+installed.</p>
+<h3 id="42-regrid">4.2 <code>.regrid()</code></h3>
+<p>Regrids a source <code>DataArray</code> onto the grid of a target <code>DataArray</code>.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">import</span> <span class="nn">xarray</span> <span class="k">as</span> <span class="nn">xr</span>
+
+<span class="n">source_ds</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_dataset</span><span class="p">(</span><span class="s1">&#39;/data/obs/sst.nc&#39;</span><span class="p">)</span>
+<span class="n">target_ds</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_dataset</span><span class="p">(</span><span class="s1">&#39;/data/model/output.nc&#39;</span><span class="p">)</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">regrid</span><span class="p">(</span>
+    <span class="n">source_ds</span><span class="p">[</span><span class="s1">&#39;analysed_sst&#39;</span><span class="p">],</span>
+    <span class="n">target_ds</span><span class="p">[</span><span class="s1">&#39;temperature&#39;</span><span class="p">],</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td><code>xr.DataArray</code></td>
+<td>—</td>
+<td>Data to regrid.</td>
+</tr>
+<tr>
+<td><code>target</code></td>
+<td><code>xr.DataArray</code></td>
+<td>—</td>
+<td>Provides the output grid; its values are ignored.</td>
+</tr>
+<tr>
+<td><code>method</code></td>
+<td>str</td>
+<td><code>'bilinear'</code></td>
+<td>Interpolation method. See <a href="#6-regridding-methods">Regridding methods</a>.</td>
+</tr>
+<tr>
+<td><code>subset</code></td>
+<td>bool</td>
+<td><code>True</code></td>
+<td>Subset source to target domain before regridding.</td>
+</tr>
+<tr>
+<td><code>periodic</code></td>
+<td>bool</td>
+<td><code>False</code></td>
+<td>Treat longitude as periodic (use for global grids).</td>
+</tr>
+<tr>
+<td><code>reuse_weights</code></td>
+<td>bool</td>
+<td><code>True</code></td>
+<td>Load cached weights if they exist; save new ones when they do not.</td>
+</tr>
+</tbody>
+</table>
+<p><code>.regrid()</code> performs no unit conversion — see
+<a href="#9-unit-conversion">Unit conversion</a>.</p>
+<p><strong>Return value:</strong> an <code>xr.DataArray</code> on the target grid with the same name and
+attributes as the source.</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Bilinear interpolation with weight caching</span>
+<span class="n">sst_on_model_grid</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">regrid</span><span class="p">(</span>
+    <span class="n">source_ds</span><span class="p">[</span><span class="s1">&#39;analysed_sst&#39;</span><span class="p">],</span>
+    <span class="n">target_ds</span><span class="p">[</span><span class="s1">&#39;temperature&#39;</span><span class="p">],</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">&#39;bilinear&#39;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Conservative — better for fluxes; disable subsetting to avoid edge effects</span>
+<span class="n">flux_on_model_grid</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">regrid</span><span class="p">(</span>
+    <span class="n">source_ds</span><span class="p">[</span><span class="s1">&#39;net_heat_flux&#39;</span><span class="p">],</span>
+    <span class="n">target_ds</span><span class="p">[</span><span class="s1">&#39;temperature&#39;</span><span class="p">],</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">&#39;conservative&#39;</span><span class="p">,</span>
+    <span class="n">subset</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Nearest-neighbour, no caching</span>
+<span class="n">mask_on_model_grid</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">regrid</span><span class="p">(</span>
+    <span class="n">source_ds</span><span class="p">[</span><span class="s1">&#39;sea_ice_mask&#39;</span><span class="p">],</span>
+    <span class="n">target_ds</span><span class="p">[</span><span class="s1">&#39;temperature&#39;</span><span class="p">],</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">&#39;nearest_s2d&#39;</span><span class="p">,</span>
+    <span class="n">reuse_weights</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<blockquote>
+<p><strong>Note:</strong> <code>method</code> must be one of the five supported values listed in
+<a href="#6-regridding-methods">Regridding methods</a>.  Passing an unknown name raises
+a <code>ValueError</code>.</p>
+</blockquote>
+<h3 id="43-subset_to_target_domain">4.3 <code>.subset_to_target_domain()</code></h3>
+<p>Subsets a source <code>DataArray</code> to the bounding box of a target <code>DataArray</code> plus
+an optional buffer in degrees.  Called automatically by <code>.regrid()</code> when
+<code>subset=True</code>, but also available independently.</p>
+<div class="codehilite"><pre><span></span><code><span class="n">source_subset</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">subset_to_target_domain</span><span class="p">(</span>
+    <span class="n">source_ds</span><span class="p">[</span><span class="s1">&#39;sst&#39;</span><span class="p">],</span>
+    <span class="n">target_ds</span><span class="p">[</span><span class="s1">&#39;temperature&#39;</span><span class="p">],</span>
+    <span class="n">buffer</span><span class="o">=</span><span class="mf">2.0</span><span class="p">,</span>      <span class="c1"># degrees of padding around target domain</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td><code>xr.DataArray</code></td>
+<td>—</td>
+<td>Data to subset.</td>
+</tr>
+<tr>
+<td><code>target</code></td>
+<td><code>xr.DataArray</code></td>
+<td>—</td>
+<td>Defines the bounding box.</td>
+</tr>
+<tr>
+<td><code>buffer</code></td>
+<td>float</td>
+<td><code>2.0</code></td>
+<td>Extra degrees of padding on each side.</td>
+</tr>
+</tbody>
+</table>
+<p>The method resolves the lat/lon coordinate names via <code>CoordinateMapper</code>
+(falling back to a hardcoded alias list if <code>name_mappings.yaml</code> isn't
+available), then uses <code>.sel()</code> with a slice on the lat/lon dimension
+coordinates — sorting first if a dimension is in descending order, since
+<code>.sel(slice(...))</code> silently returns zero results otherwise. If no
+recognized lat/lon dimension is found, the source is returned unchanged and
+a debug message is logged; if <code>.sel()</code> itself fails for any other reason a
+warning is logged and the source is also returned unchanged.</p>
+<h3 id="44-regrid_data">4.4 <code>regrid_data()</code></h3>
+<p>A convenience wrapper that creates a throwaway <code>RegridManager</code> and calls
+<code>.regrid()</code> in a single step.  Suitable for one-off use in scripts where you
+do not need to reuse the manager across multiple calls.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.regridding</span> <span class="kn">import</span> <span class="n">regrid_data</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">regrid_data</span><span class="p">(</span>
+    <span class="n">source_ds</span><span class="p">[</span><span class="s1">&#39;sst&#39;</span><span class="p">],</span>
+    <span class="n">target_ds</span><span class="p">[</span><span class="s1">&#39;temperature&#39;</span><span class="p">],</span>
+    <span class="n">method</span><span class="o">=</span><span class="s1">&#39;bilinear&#39;</span><span class="p">,</span>
+    <span class="n">subset</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+    <span class="n">cache_dir</span><span class="o">=</span><span class="s1">&#39;./regrid_weights&#39;</span><span class="p">,</span>
+    <span class="n">verbose</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td><code>xr.DataArray</code></td>
+<td>—</td>
+<td>Data to regrid.</td>
+</tr>
+<tr>
+<td><code>target</code></td>
+<td><code>xr.DataArray</code></td>
+<td>—</td>
+<td>Target grid reference.</td>
+</tr>
+<tr>
+<td><code>method</code></td>
+<td>str</td>
+<td><code>'bilinear'</code></td>
+<td>Interpolation method.</td>
+</tr>
+<tr>
+<td><code>subset</code></td>
+<td>bool</td>
+<td><code>True</code></td>
+<td>Subset source to target domain.</td>
+</tr>
+<tr>
+<td><code>cache_dir</code></td>
+<td>str</td>
+<td><code>~/.cache/ocean-data/regridding</code></td>
+<td>Weight file directory.</td>
+</tr>
+<tr>
+<td><code>verbose</code></td>
+<td>bool</td>
+<td><code>False</code></td>
+<td>Progress output.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Return value:</strong> an <code>xr.DataArray</code> on the target grid.</p>
+<blockquote>
+<p><strong>Note:</strong> <code>regrid_data()</code> creates a new <code>RegridManager</code> on every call.  For
+repeated regridding operations (e.g. in a loop over time periods), use a
+single <code>RegridManager</code> instance directly so the <code>CoordinateMapper</code> and
+directory handle are reused.</p>
+</blockquote>
+<h3 id="45-open_with_chunks">4.5 <code>open_with_chunks()</code></h3>
+<p>Opens a NetCDF file and returns a single variable as a Dask-backed
+<code>DataArray</code> with time chunking.  Useful when the source file is too large to
+fit in memory.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.regridding</span> <span class="kn">import</span> <span class="n">open_with_chunks</span>
+
+<span class="n">sst</span> <span class="o">=</span> <span class="n">open_with_chunks</span><span class="p">(</span>
+    <span class="s1">&#39;/data/obs/sst_2023.nc&#39;</span><span class="p">,</span>
+    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;analysed_sst&#39;</span><span class="p">,</span>
+    <span class="n">time_chunk</span><span class="o">=</span><span class="mi">30</span><span class="p">,</span>          <span class="c1"># 30 time steps per Dask chunk</span>
+<span class="p">)</span>
+
+<span class="n">result</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">regrid</span><span class="p">(</span><span class="n">sst</span><span class="p">,</span> <span class="n">target_ds</span><span class="p">[</span><span class="s1">&#39;temperature&#39;</span><span class="p">])</span>
+</code></pre></div>
+
+<p><strong>Parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td>str</td>
+<td>—</td>
+<td>Path to the NetCDF file.</td>
+</tr>
+<tr>
+<td><code>variable</code></td>
+<td>str</td>
+<td>—</td>
+<td>Variable name to extract.</td>
+</tr>
+<tr>
+<td><code>time_chunk</code></td>
+<td>int</td>
+<td><code>30</code></td>
+<td>Number of time steps per Dask chunk.</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Return value:</strong> <code>xr.DataArray</code> backed by Dask (lazy, not yet loaded).</p>
+<hr />
+<h2 id="5-weight-caching">5. Weight caching</h2>
+<p>Computing xESMF interpolation weights is the most expensive part of
+regridding.  For a pair of grids the weights need to be computed only once;
+subsequent calls with the same grids reuse the cached file, reducing wall time
+from minutes to seconds.</p>
+<p><strong>How the cache key is computed:</strong></p>
+<p>The weight filename is derived from the first 12 hex characters of an MD5
+hash of the following string:</p>
+<div class="codehilite"><pre><span></span><code>{source.shape}_{target.shape}_{method}_{src_lat_min}_{src_lat_max}_{src_lon_min}_{src_lon_max}_{tgt_lat_min}_{tgt_lat_max}_{tgt_lon_min}_{tgt_lon_max}
+</code></pre></div>
+
+<p>Array shape plus the full lat/lon bounding box (min and max, both axes) of
+each grid are included in the key — not just the latitude minimum — so two
+grids with the same number of points but covering different geographic
+regions never share weights. If the lat/lon bounds can't be extracted for
+some reason, the key silently falls back to shape + method only.</p>
+<p>Weight files are saved as NetCDF (xESMF native format) under the cache
+directory:</p>
+<div class="codehilite"><pre><span></span><code>regrid_weights/
+└── weights_bilinear_a3f9c12de801.nc
+└── weights_conservative_1b4e7f2a9c03.nc
+</code></pre></div>
+
+<p><strong>Cache behaviour:</strong></p>
+<ul>
+<li>On first call: weights are computed and saved.</li>
+<li>On subsequent calls with the same grids: the existing file is loaded.</li>
+<li><code>reuse_weights=False</code> (or <code>--no-cache</code>): weights are neither loaded nor saved.</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> If you change the spatial extent of your data between runs but
+keep the same array shape, the hash will change and a new weight file will
+be created — the old one is not deleted automatically.  Clean up
+<code>./regrid_weights/</code> periodically if you are experimenting with different
+domains.</p>
+</blockquote>
+<hr />
+<h2 id="6-regridding-methods">6. Regridding methods</h2>
+<table>
+<thead>
+<tr>
+<th>Method</th>
+<th>Flag value</th>
+<th>Description</th>
+<th>Best for</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Bilinear</td>
+<td><code>bilinear</code></td>
+<td>Distance-weighted average of surrounding source points. Fast and smooth.</td>
+<td>General purpose; SST, SSH, temperature fields</td>
+</tr>
+<tr>
+<td>Conservative</td>
+<td><code>conservative</code></td>
+<td>Preserves the area-weighted integral. Slower than bilinear.</td>
+<td>Fluxes, precipitation, quantities that must be budgeted</td>
+</tr>
+<tr>
+<td>Nearest source to dest</td>
+<td><code>nearest_s2d</code></td>
+<td>Each destination point takes the value of its nearest source point.</td>
+<td>Categorical masks, flag variables, binary fields</td>
+</tr>
+<tr>
+<td>Nearest dest to source</td>
+<td><code>nearest_d2s</code></td>
+<td>Each source point is assigned to its nearest destination point.</td>
+<td>Upsampling (coarse → fine), filling in sparse observations</td>
+</tr>
+<tr>
+<td>Patch</td>
+<td><code>patch</code></td>
+<td>Higher-order conservative. Smoother than conservative but slower.</td>
+<td>High-accuracy conservative regridding where smoothness matters</td>
+</tr>
+</tbody>
+</table>
+<p>The default is <code>bilinear</code>.  For most ocean validation use cases — SST, SSS,
+SSH — <code>bilinear</code> is the right choice.  Use <code>conservative</code> when you need to
+preserve area integrals, for example when regridding heat fluxes before
+computing a budget.</p>
+<hr />
+<h2 id="7-coordinate-name-handling">7. Coordinate name handling</h2>
+<p>xESMF requires that the latitude and longitude coordinate arrays in both
+source and target <code>DataArrays</code> be named exactly <code>lat</code> and <code>lon</code>.  Many ocean
+model formats use different names:</p>
+<table>
+<thead>
+<tr>
+<th>Model</th>
+<th>Latitude coord</th>
+<th>Longitude coord</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NEMO</td>
+<td><code>nav_lat</code></td>
+<td><code>nav_lon</code></td>
+</tr>
+<tr>
+<td>Custom (this project)</td>
+<td><code>latt</code></td>
+<td><code>lont</code></td>
+</tr>
+<tr>
+<td>ROMS</td>
+<td><code>lat_rho</code></td>
+<td><code>lon_rho</code></td>
+</tr>
+<tr>
+<td>CESM</td>
+<td><code>TLAT</code></td>
+<td><code>TLONG</code></td>
+</tr>
+<tr>
+<td>ERA5</td>
+<td><code>latitude</code></td>
+<td><code>longitude</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>RegridManager._prepare_for_xesmf()</code> handles this automatically.  Before
+building the xESMF regridder it uses <code>CoordinateMapper</code> (from
+<code>ocean_data.name_mappings</code>, driven by <code>ocean-data/config/name_mappings.yaml</code>)
+to find the actual geographic coordinate names, and handles the two cases
+differently:</p>
+<ul>
+<li><strong>Dimension coordinate</strong> (e.g. ERA5's <code>latitude</code>/<code>longitude</code>, which are
+  also dimension names): left alone. xESMF's CF accessor already finds it by
+  <code>standard_name</code> — adding a <code>lat</code> alias on top would create a second
+  coordinate with the same <code>standard_name</code> and make xESMF raise "multiple
+  variables for key 'latitude'" during conservative regridding.</li>
+<li><strong>Non-dimension coordinate</strong> (e.g. NEMO's <code>nav_lat</code>/<code>nav_lon</code>, this
+  project's <code>latt</code>/<code>lont</code>, both 2-D arrays indexed by <code>y</code>/<code>x</code>): a <code>lat</code>/<code>lon</code>
+  alias is assigned <strong>and the original coordinate name is dropped</strong>:</li>
+</ul>
+<p><code>python
+  # Internally, for a NEMO file with a 2-D nav_lat coordinate:
+  data = data.assign_coords(lat=data.coords['nav_lat']).drop_vars('nav_lat')</code></p>
+<p><code>_prepare_for_xesmf()</code> also sorts any descending 1-D <code>lat</code>/<code>lon</code> dimension
+axis to ascending (xESMF requires monotonically increasing coordinates) and
+converts a non-contiguous array to C-contiguous (xESMF otherwise warns and
+runs slower).</p>
+<p>This happens transparently — you never need to rename coordinates yourself.</p>
+<p>To add support for a new model format, add its coordinate names to
+<code>ocean-data/config/name_mappings.yaml</code> under the <code>latitude</code> and <code>longitude</code>
+alias lists.  No Python changes are needed.</p>
+<blockquote>
+<p><strong>Note:</strong> for a non-dimension coordinate, the original name (<code>nav_lat</code>,
+<code>latt</code>, etc.) is <strong>dropped</strong>, not kept alongside the new <code>lat</code>/<code>lon</code>
+alias — the regridded result only has <code>lat</code>/<code>lon</code>. For a dimension
+coordinate like ERA5's <code>latitude</code>/<code>longitude</code>, nothing is renamed or
+dropped at all; the original name is what xESMF actually uses.</p>
+</blockquote>
+<hr />
+<h2 id="8-domain-subsetting">8. Domain subsetting</h2>
+<p>When the source grid covers a much larger area than the target (for example
+regridding a global observation product onto a small regional model), loading
+the full source into memory before regridding is wasteful.  The default
+behaviour is to subset the source first:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># The regrid() call automatically subsets when subset=True (the default)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">regrid</span><span class="p">(</span><span class="n">source_da</span><span class="p">,</span> <span class="n">target_da</span><span class="p">,</span> <span class="n">subset</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># Which is equivalent to calling these two steps manually:</span>
+<span class="n">source_sub</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">subset_to_target_domain</span><span class="p">(</span><span class="n">source_da</span><span class="p">,</span> <span class="n">target_da</span><span class="p">,</span> <span class="n">buffer</span><span class="o">=</span><span class="mf">2.0</span><span class="p">)</span>
+<span class="n">result</span> <span class="o">=</span> <span class="n">manager</span><span class="o">.</span><span class="n">regrid</span><span class="p">(</span><span class="n">source_sub</span><span class="p">,</span> <span class="n">target_da</span><span class="p">,</span> <span class="n">subset</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</code></pre></div>
+
+<p>The <code>buffer</code> parameter (default <code>2.0°</code>) adds a margin around the target
+bounding box before subsetting.  This ensures that interpolation stencils
+near the domain edges have enough surrounding source points to produce
+accurate results.</p>
+<p><strong>When to use <code>--no-subset</code> / <code>subset=False</code>:</strong></p>
+<ul>
+<li>Source and target cover the same region (no data would be discarded).</li>
+<li>The source grid is small and fits in memory anyway.</li>
+<li>Conservative regridding near the domain edge produces artefacts because the
+  clipped source boundary introduces sharp gradients — in this case load the
+  full source and let xESMF use its natural boundary conditions.</li>
+</ul>
+<blockquote>
+<p><strong>Note:</strong> Subsetting uses <code>.sel()</code> with a slice on the lat/lon dimension
+(sorted to ascending order first if needed), using bounds read from the
+actual geographic coordinate array (resolved via <code>CoordinateMapper</code>, so it
+works whether that array is <code>lat</code>, <code>nav_lat</code>, <code>latt</code>, etc.). If the
+dimension can't be identified at all, or <code>.sel()</code> fails for any reason
+(e.g. the dimension has no attached index coordinate to select on, which
+can happen for some 2-D-coordinate grids), subsetting is skipped: a
+warning is logged and the source is returned unchanged rather than
+raising. For such files use <code>subset=False</code> explicitly to skip the attempt.</p>
+</blockquote>
+<hr />
+<h2 id="9-unit-conversion">9. Unit conversion</h2>
+<p><code>RegridManager.regrid()</code> performs <strong>no</strong> unit conversion of its own — it
+regrids values exactly as given, in whatever units the source happens to be
+in. If the source and target are in different units (e.g. temperature in
+Kelvin vs Celsius) the regridded output stays in the source's original
+units; convert before or after calling <code>.regrid()</code>.</p>
+<p>One existing convention for this, used by <code>gridded-2d-validation</code>'s own
+observation-loading config (not by <code>regrid</code>/<code>RegridManager</code> itself), is a
+per-dataset <code>offset</code>/<code>scale_factor</code> pair next to the dataset <code>path</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">observations</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">sst</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">CCI-SST</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;${CCI_SST_FOLDER}/sst_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">offset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-273.15</span><span class="w">      </span><span class="c1"># Kelvin → Celsius, applied after loading</span>
+</code></pre></div>
+
+<p>That mechanism is specific to the observation-loading step of the
+validation pipeline, not a general feature of <code>ocean_data.regridding</code> — if
+you're calling <code>RegridManager</code>/<code>regrid_data</code> directly, apply any unit
+conversion to the source <code>DataArray</code> yourself before passing it in.</p>
+<hr />
+<h2 id="10-troubleshooting">10. Troubleshooting</h2>
+<p><strong><code>ImportError: xESMF is required</code></strong></p>
+<div class="codehilite"><pre><span></span><code>ImportError: xESMF is required. Install with: pip install xesmf
+</code></pre></div>
+
+<p>Install xESMF via conda for the most reliable ESMF build:</p>
+<div class="codehilite"><pre><span></span><code>conda<span class="w"> </span>install<span class="w"> </span>-c<span class="w"> </span>conda-forge<span class="w"> </span>esmf<span class="w"> </span>esmpy<span class="w"> </span>xesmf
+</code></pre></div>
+
+<hr />
+<p><strong><code>ValueError: Method must be one of [...]</code></strong></p>
+<p>The <code>--method</code> value (or <code>method</code> argument) is not one of the five supported
+names.  Check the <a href="#6-regridding-methods">Regridding methods</a> table.</p>
+<hr />
+<p><strong><code>ValueError: --target-variable 'X' not found in target file</code></strong></p>
+<p>The variable named by <code>--target-variable</code> does not exist in the target file.
+Run a quick inspection to see what variables are available:</p>
+<div class="codehilite"><pre><span></span><code>data-loader<span class="w"> </span>/data/model/output.nc<span class="w"> </span>--info
+</code></pre></div>
+
+<hr />
+<p><strong>Output is all <code>NaN</code></strong></p>
+<p>This usually means xESMF could not find geographic coordinates.  The most
+common cause is that <code>_prepare_for_xesmf()</code> could not map the coordinate
+names because they are not in <code>ocean-data/config/name_mappings.yaml</code>.</p>
+<p>Check what coordinate names the file uses:</p>
+<div class="codehilite"><pre><span></span><code>data-loader<span class="w"> </span>/data/model/output.nc<span class="w"> </span>--info
+</code></pre></div>
+
+<p>Then add the missing names to <code>ocean-data/config/name_mappings.yaml</code> under
+<code>latitude</code> or <code>longitude</code>.</p>
+<hr />
+<p><strong>Output has data only in part of the domain / edge <code>NaN</code> strip</strong></p>
+<p>The source does not fully cover the target domain after subsetting, or the
+buffer was too small.  Try:</p>
+<ol>
+<li>Increasing the buffer by calling <code>.subset_to_target_domain()</code> manually
+   with a larger <code>buffer</code> value before passing to <code>.regrid(subset=False)</code>.</li>
+<li>Passing <code>--no-subset</code> / <code>subset=False</code> to use the full source extent.</li>
+<li>For global sources that wrap around the dateline, add <code>--periodic</code> /
+   <code>periodic=True</code>.</li>
+</ol>
+<hr />
+<p><strong>Conservative regridding raises an ESMF error about grid bounds</strong></p>
+<p>The conservative method requires cell-corner coordinates (bounds), not just
+cell-centre coordinates.  If the source or target file does not contain bounds
+(e.g. <code>lat_bnds</code>, <code>lon_bnds</code>), xESMF falls back to estimating them, which
+may fail for irregular grids.  Switch to <code>bilinear</code> or <code>nearest_s2d</code> for
+irregular-grid files that lack explicit bounds.</p>
+<hr />
+<p><strong>Weight file is stale after changing the source domain</strong></p>
+<p>If you re-run with a different spatial subset of the same source file but the
+array shape happens to be the same as before, the hash changes (because the
+coordinate extremes change) and a fresh weight file is created automatically.
+If the shape also changed, the hash changes too.  Stale weight files are
+never automatically deleted; remove the <code>./regrid_weights/</code> directory to
+start fresh.</p>
+<hr />
+<p><strong><code>Could not subset source to target domain</code> warning</strong></p>
+<p>The source file has 2-D dimension coordinates (e.g. curvilinear NEMO grids
+where <code>y</code>/<code>x</code> are the dimensions and <code>nav_lat</code>/<code>nav_lon</code> are 2-D non-dimension
+coords).  <code>.sel()</code> with a lat/lon slice cannot operate on such grids.  Pass
+<code>subset=False</code> (or <code>--no-subset</code>) to skip subsetting and proceed with
+regridding on the full source array.</p></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

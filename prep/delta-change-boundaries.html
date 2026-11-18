@@ -1,0 +1,216 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Delta-change boundary conditions · ocean-* documentation</title>
+<meta name="description" content="Delta-change boundary conditions">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="index.html" aria-current="page">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-prep</a></div><h1>Delta-change boundary conditions</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-prep</h2><ul><li><a href="index.html">Overview</a></li><li><a href="model-setup.html">Model Setup Guide</a></li><li><a href="bathymetry.html">Bathymetry Guide</a></li><li><a href="boundaries-cmems.html">CMEMS Boundary Conditions Guide</a></li><li><a href="boundaries-cmip6.html">CMIP6 Boundary Conditions Guide</a></li><li><a href="tidal-boundaries.html">Tidal + CMIP6 mean boundary conditions</a></li><li><a href="delta-change-boundaries.html" aria-current="page">Delta-change boundary conditions</a></li><li><a href="boundary-diagnostics.html">Boundary Diagnostics Guide</a></li><li><a href="initial-conditions.html">Initial Conditions Guide</a></li><li><a href="radiation-bc.html">Radiation Bias Correction Guide</a></li><li><a href="humidity-bc.html">Humidity Bias Correction Guide</a></li><li><a href="bias-correction-guide.html">Bias Correction of Atmospheric Forcings — User &amp; Technical Guide</a></li></ul></aside><article class="doc"><h1 id="delta-change-boundary-conditions">Delta-change boundary conditions</h1>
+<p>Guide for <code>run-delta-boundaries</code> — future climate boundary files that combine
+high-resolution AMM7/AMM15 historical data with the CMIP6 climate change signal.</p>
+<hr />
+<h2 id="motivation">Motivation</h2>
+<p>Directly using CMIP6 model output as open boundary conditions has two problems:</p>
+<ol>
+<li><strong>Coarse resolution</strong> — CMIP6 models at 0.25°–1° miss shelf-sea dynamics and
+   may place boundary points in land cells.</li>
+<li><strong>Model biases</strong> — CMIP6 temperature and salinity can be systematically
+   offset from observations by several degrees / PSU.</li>
+</ol>
+<p>The <strong>delta-change method</strong> solves both by keeping the high-resolution
+AMM7/AMM15 product as the baseline and adding only the CMIP6 <em>change signal</em>:</p>
+<div class="codehilite"><pre><span></span><code>corrected(t) = AMM7/AMM15_ref(t_analog)
+             + [CMIP6_future_clim(month) − CMIP6_hist_clim(month)]
+</code></pre></div>
+
+<p>Result: synoptic variability and spatial structure from the high-resolution
+reanalysis; long-term climate change trend from CMIP6.</p>
+<hr />
+<h2 id="method-details">Method details</h2>
+<h3 id="reference-cycling">Reference cycling</h3>
+<p><code>t_analog</code> maps each future date to a historical analog:</p>
+<div class="codehilite"><pre><span></span><code>analog_year = ref_start_year + (future_year − ref_start_year) % n_hist_years
+</code></pre></div>
+
+<p>February 29 in a leap year maps to February 28 when the analog year is not a
+leap year.  The same day-of-year and hour are preserved.</p>
+<h3 id="cmip6-change-signal">CMIP6 change signal</h3>
+<p>For each CMIP6 model and scenario:</p>
+<ol>
+<li>Compute <code>hist_clim(month)</code> — monthly climatology of the variable over
+   <code>cmip6.hist_period</code> from the <code>historical</code> experiment.</li>
+<li>Compute <code>fut_clim(month)</code> — monthly climatology over <code>cmip6.future_period</code>
+   from the scenario experiment.</li>
+<li><code>delta(month) = fut_clim(month) − hist_clim(month)</code> — the change signal.</li>
+</ol>
+<p>For 3-D variables (thetao, so) the delta has shape <code>(12, n_depth_cmip6, n_pts)</code>.
+It is remapped from CMIP6 depth levels onto the AMM7/AMM15 depth levels with
+linear interpolation before being added to the reference data.</p>
+<p>For 2-D variables (zos) or depth-integrated variables (uo, vo): delta has shape
+<code>(12, n_pts)</code>.</p>
+<h3 id="time-interpolation">Time interpolation</h3>
+<p>The monthly delta is linearly interpolated onto the reference dataset's time
+axis (daily for T/S, hourly for SSH/transport) before addition.</p>
+<hr />
+<h2 id="config-reference">Config reference</h2>
+<div class="codehilite"><pre><span></span><code><span class="nt">source_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6_delta_change</span>
+
+<span class="c1"># ── High-resolution historical reference ─────────────────────────────────────</span>
+<span class="nt">reference</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">directories</span><span class="p">:</span>
+<span class="w">    </span><span class="c1"># per-variable paths to boundary NetCDF directories</span>
+<span class="w">    </span><span class="nt">thetao</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse/daily</span>
+<span class="w">    </span><span class="nt">so</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse/daily</span>
+<span class="w">    </span><span class="nt">zos</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse/hourly</span>
+<span class="w">    </span><span class="nt">uo</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse/hourly</span>
+<span class="w">    </span><span class="nt">vo</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse/hourly</span>
+<span class="w">  </span><span class="nt">period</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1993-01-01&quot;</span><span class="w">   </span><span class="c1"># start of the cycling reference period</span>
+<span class="w">    </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2022-12-31&quot;</span><span class="w">   </span><span class="c1"># end   of the cycling reference period</span>
+
+<span class="c1"># ── CMIP6 change signal ───────────────────────────────────────────────────────</span>
+<span class="nt">cmip6</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MPI-ESM1-2-HR</span>
+<span class="w">  </span><span class="nt">experiment_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssp370</span><span class="w">      </span><span class="c1"># default scenario; override with --scenario</span>
+<span class="w">  </span><span class="nt">access</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span><span class="w">              </span><span class="c1"># &#39;local&#39; | &#39;esgf&#39; | &#39;pangeo&#39;</span>
+<span class="w">  </span><span class="nt">local_root</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/CMIP6</span>
+<span class="w">  </span><span class="nt">table_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Omon</span>
+<span class="w">  </span><span class="nt">variant_label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">r1i1p1f1</span>
+<span class="w">  </span><span class="nt">grid_label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gn</span>
+
+<span class="w">  </span><span class="nt">hist_period</span><span class="p">:</span><span class="w">               </span><span class="c1"># period for historical climatology</span>
+<span class="w">    </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1985-01-01&quot;</span>
+<span class="w">    </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2014-12-31&quot;</span>
+
+<span class="w">  </span><span class="nt">future_period</span><span class="p">:</span><span class="w">             </span><span class="c1"># period for future climatology</span>
+<span class="w">    </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2070-01-01&quot;</span>
+<span class="w">    </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2099-12-31&quot;</span>
+
+<span class="c1"># ── Variables ─────────────────────────────────────────────────────────────────</span>
+<span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">thetao</span><span class="w">             </span><span class="c1"># output variable name</span>
+<span class="w">    </span><span class="nt">cmip6_var</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">thetao</span><span class="w">        </span><span class="c1"># CMIP6 variable name</span>
+<span class="w">    </span><span class="nt">table_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Omon</span><span class="w">           </span><span class="c1"># override cmip6.table_id if needed</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span><span class="w">         </span><span class="c1"># reference data frequency: daily | hourly</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">so</span>
+<span class="w">    </span><span class="nt">cmip6_var</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">so</span>
+<span class="w">    </span><span class="nt">table_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Omon</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zos</span>
+<span class="w">    </span><span class="nt">cmip6_var</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">zos</span>
+<span class="w">    </span><span class="nt">table_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Omon</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hourly</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uo</span>
+<span class="w">    </span><span class="nt">cmip6_var</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uo</span>
+<span class="w">    </span><span class="nt">table_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Omon</span>
+<span class="w">    </span><span class="nt">depth_integrate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">    </span><span class="c1"># depth-integrate 3-D → 2-D transport</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hourly</span>
+
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vo</span>
+<span class="w">    </span><span class="nt">cmip6_var</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vo</span>
+<span class="w">    </span><span class="nt">table_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Omon</span>
+<span class="w">    </span><span class="nt">depth_integrate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hourly</span>
+
+<span class="c1"># ── Output time range (the projected period to produce) ───────────────────────</span>
+<span class="nt">time_range</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start_date</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2015-01-01&quot;</span>
+<span class="w">  </span><span class="nt">end_date</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2100-12-31&quot;</span>
+<span class="w">  </span><span class="nt">calendar</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standard</span>
+
+<span class="c1"># ── Output ────────────────────────────────────────────────────────────────────</span>
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">base_directory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse/delta_change</span>
+<span class="w">  </span><span class="nt">filename_template</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;delta_{source_id}_{experiment_id}_{variable}_{start}_{end}.nc&quot;</span>
+</code></pre></div>
+
+<hr />
+<h2 id="cli-reference">CLI reference</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Full run (all variables, default scenario)</span>
+run-delta-boundaries<span class="w">  </span>--config<span class="w"> </span>config/nse_delta_bdy.yaml
+
+<span class="c1"># Dry run</span>
+run-delta-boundaries<span class="w">  </span>--config<span class="w"> </span>config/nse_delta_bdy.yaml<span class="w"> </span>--dryrun
+
+<span class="c1"># Process only specific variables</span>
+run-delta-boundaries<span class="w">  </span>--config<span class="w"> </span>config/nse_delta_bdy.yaml<span class="w"> </span>--variable<span class="w"> </span>thetao<span class="w"> </span>so
+
+<span class="c1"># Run multiple scenarios</span>
+run-delta-boundaries<span class="w">  </span>--config<span class="w"> </span>config/nse_delta_bdy.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--scenario<span class="w"> </span>ssp126<span class="w"> </span>ssp245<span class="w"> </span>ssp370<span class="w"> </span>ssp585
+
+<span class="c1"># Override future period (e.g. near-term projection)</span>
+run-delta-boundaries<span class="w">  </span>--config<span class="w"> </span>config/nse_delta_bdy.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--future-start<span class="w"> </span><span class="m">2040</span>-01-01<span class="w"> </span>--future-end<span class="w"> </span><span class="m">2059</span>-12-31
+</code></pre></div>
+
+<hr />
+<h2 id="output">Output</h2>
+<p>One NetCDF file per variable + scenario combination, dimensions <code>(time, nbdyp)</code>
+or <code>(time, nbdyp, depth)</code> for 3-D variables:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Dims</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>thetao</code></td>
+<td>time, nbdyp, depth</td>
+<td>Potential temperature</td>
+</tr>
+<tr>
+<td><code>so</code></td>
+<td>time, nbdyp, depth</td>
+<td>Practical salinity</td>
+</tr>
+<tr>
+<td><code>zos</code></td>
+<td>time, nbdyp</td>
+<td>Sea surface height</td>
+</tr>
+<tr>
+<td><code>uo</code></td>
+<td>time, nbdyp</td>
+<td>Barotropic eastward transport (m²/s)</td>
+</tr>
+<tr>
+<td><code>vo</code></td>
+<td>time, nbdyp</td>
+<td>Barotropic northward transport (m²/s)</td>
+</tr>
+</tbody>
+</table>
+<p>The output NetCDF includes global attributes recording the reference period,
+CMIP6 model, scenario, and delta-change parameters.</p>
+<hr />
+<h2 id="notes">Notes</h2>
+<ul>
+<li><strong>Reference period</strong>: choose 20–30 years that have stable, high-quality AMM7
+  or AMM15 reanalysis coverage.  The 1993–2022 period works well for the NSe
+  setup.</li>
+<li><strong>Future period</strong>: a 20–30 year window centred on the epoch of interest
+  averages out internal variability in the CMIP6 change signal.</li>
+<li><strong>Multiple scenarios</strong>: specify <code>--scenario ssp126 ssp370 ssp585</code> to process
+  all in a single call.</li>
+<li><strong>Combining with tidal</strong>: the delta-change output for SSH/transport and the
+  tidal boundary output are complementary — use tidal + CMIP6 mean for the
+  hourly signal and delta-change for the low-frequency daily/monthly variability
+  if separate hourly tidal forcing is not needed.</li>
+<li><strong>Depth level mismatch</strong>: CMIP6 depth levels are typically coarser than
+  AMM7/AMM15.  <code>_remap_delta_depth()</code> handles the remapping with linear
+  interpolation, so no preprocessing of CMIP6 data is required.</li>
+</ul></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Profile Validation Guide · ocean-* documentation</title>
+<meta name="description" content="Profile Validation Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="index.html" aria-current="page">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-post</a></div><h1>Profile Validation Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-post</h2><ul><li><a href="index.html">Overview</a></li><li><a href="run-validation.html">run-analyses Guide</a></li><li><a href="gridded-2d-validation.html">Gridded 2D Validation Guide</a></li><li><a href="gridded-3d-validation.html">Gridded 3D Validation Guide</a></li><li><a href="profile-validation.html" aria-current="page">Profile Validation Guide</a></li><li><a href="tidal-analysis.html">Tidal Analysis Guide</a></li><li><a href="mle-comparison.html">MLE Cross-Experiment Comparison Guide</a></li><li><a href="scenarios.html">Scenario Analysis Guide</a></li><li><a href="river-projection.html">River Flow and Nutrient Load Projection Guide</a></li><li><a href="regridding.html">Regridding User Guide</a></li><li><a href="simulation-list.html">Simulation List Guide</a></li><li><a href="statistics-db.html">Statistics Database Guide</a></li><li><a href="manage-analyses.html">manage-analyses Guide</a></li><li><a href="reporting.html">Reporting Guide</a></li></ul></aside><article class="doc"><h1 id="profile-validation-guide">Profile Validation Guide</h1>
+<h2 id="overview">Overview</h2>
+<p>Five scripts share the same profile validation workflow:</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Observation source</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>argo-profiles</code></td>
+<td>Argo floats (Ifremer ERDDAP)</td>
+</tr>
+<tr>
+<td><code>glodap-profiles</code></td>
+<td>GLODAP v2.2023 bottle data</td>
+</tr>
+<tr>
+<td><code>wod-profiles</code></td>
+<td>World Ocean Database (NOAA ERDDAP)</td>
+</tr>
+<tr>
+<td><code>cruise-ctd-profiles</code></td>
+<td>ICES / EMODnet cruise CTD casts</td>
+</tr>
+<tr>
+<td><code>ices-profiles</code></td>
+<td>ICES/ECOVAL profiles (local Feather files)</td>
+</tr>
+<tr>
+<td><code>fixed-platform</code></td>
+<td>EMODnet fixed-platform (mooring/buoy) profiles</td>
+</tr>
+</tbody>
+</table>
+<p>All six follow the same config structure, output layout, and command-line flags.</p>
+<h2 id="config-structure">Config structure</h2>
+<p>Annotated example configs:
+config/argo_profiles.yaml ·
+config/glodap_profiles.yaml ·
+config/cruise_ctd_profiles.yaml ·
+config/wod_profiles.yaml ·
+config/ices_profiles.yaml ·
+config/fixed_platform.yaml</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># config/argo_profiles.yaml (per-run)</span>
+<span class="nt">area</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NA</span>
+<span class="nt">experiment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Baseline</span><span class="w">   </span><span class="c1"># overridden by --experiment when --source is used</span>
+
+<span class="nt">years</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2020</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2022</span><span class="p p-Indicator">]</span><span class="w">           </span><span class="c1"># or year: 2021 for a single year</span>
+<span class="nt">domain</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-20.0</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">10.0</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">40.0</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">65.0</span>
+
+<span class="nt">variables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">TEMP</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">PSAL</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">DOXY</span><span class="p p-Indicator">]</span><span class="w"> </span><span class="c1"># subset of available variables</span>
+
+<span class="nt">argo</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">dataset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">realtime</span>
+<span class="w">  </span><span class="nt">wmo_numbers</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[]</span><span class="w">         </span><span class="c1"># leave empty to download all floats in domain</span>
+<span class="w">  </span><span class="nt">cache_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;${CACHE_ROOT}/argo&quot;</span>
+
+<span class="nt">model</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Location, layout and variable names come from config/sources.yaml</span>
+<span class="w">  </span><span class="c1"># (use --source). See the section below. Remove the model block entirely</span>
+<span class="w">  </span><span class="c1"># for obs-only diagnostics.</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pyGETM&quot;</span>
+<span class="w">  </span><span class="nt">filename_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;nse_3d.nc&quot;</span>
+<span class="w">  </span><span class="nt">layout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">explicit_file</span>
+<span class="w">  </span><span class="nt">subdir</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">CMEMS</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{experiment}&quot;</span>
+<span class="w">    </span><span class="nt">WOA</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{experiment}&quot;</span>
+<span class="w">    </span><span class="nt">CMIP6</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{model}/{scenario}/{experiment}&quot;</span>
+<span class="w">    </span><span class="nt">CMIP6_raw</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{model}/{scenario}/{experiment}&quot;</span>
+<span class="w">  </span><span class="nt">run_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GFDL-ESM4</span><span class="w">     </span><span class="c1"># CMIP6 / CMIP6_raw run: overridden by --model</span>
+<span class="w">  </span><span class="nt">run_scenario</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssp126</span><span class="w">     </span><span class="c1"># CMIP6 / CMIP6_raw run: overridden by --scenario</span>
+<span class="w">  </span><span class="nt">variable_map</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">TEMP</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">temp</span>
+<span class="w">    </span><span class="nt">PSAL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">salt</span>
+<span class="w">    </span><span class="nt">DOXY</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">doxy</span>
+<span class="w">  </span><span class="c1"># max_time_gap_hours: 36  # optional: obs farther than this from every model</span>
+<span class="w">  </span><span class="c1">#                         # time step (or undated) get no model value;</span>
+<span class="w">  </span><span class="c1">#                         # default 1.5 x the model&#39;s output interval</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">analyses_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;${OCEANICU_ANALYSES_FOLDER}&quot;</span><span class="w">   </span><span class="c1"># no default — see below</span>
+<span class="w">  </span><span class="nt">save_residuals</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">     </span><span class="c1"># default on; set false to disable</span>
+<span class="w">  </span><span class="nt">prefix</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;na_argo&quot;</span><span class="w">         </span><span class="c1"># stem for overview figure filenames</span>
+</code></pre></div>
+
+<p>Required keys: <code>area</code>, <code>experiment</code>, and (only without <code>--source</code>)
+<code>model.base_path</code>, <code>model.filename_pattern</code>.</p>
+<h2 id="model-source---source----experiment----model----scenario">Model source: <code>--source</code> / <code>--experiment</code> / <code>--model</code> / <code>--scenario</code></h2>
+<p>Model input comes from config/sources.yaml,
+selected with <code>--source</code> — the same mechanism as tidal and gridded
+validation:</p>
+<div class="codehilite"><pre><span></span><code>argo-profiles<span class="w"> </span>--config<span class="w"> </span>config/argo_profiles.yaml<span class="w"> </span>--source<span class="w"> </span>CMEMS<span class="w"> </span>--experiment<span class="w"> </span>run01<span class="w"> </span>--years<span class="w"> </span><span class="m">2020</span><span class="w"> </span><span class="m">2022</span>
+
+<span class="c1"># CMIP6_raw run — forcing WITHOUT bias correction (e.g. ssp126)</span>
+argo-profiles<span class="w"> </span>--config<span class="w"> </span>config/argo_profiles.yaml<span class="w"> </span>--source<span class="w"> </span>CMIP6_raw<span class="w"> </span>--model<span class="w"> </span>GFDL-ESM4<span class="w"> </span>--scenario<span class="w"> </span>ssp126<span class="w"> </span>--experiment<span class="w"> </span>run01<span class="w"> </span>--years<span class="w"> </span><span class="m">2020</span><span class="w"> </span><span class="m">2022</span>
+</code></pre></div>
+
+<p><code>CMIP6</code> is bias-corrected forcing; <code>CMIP6_raw</code> is not — use <code>CMIP6_raw</code> for
+raw-forcing runs. <code>--experiment</code> is the run folder name, and the output
+label becomes <code>&lt;SOURCE&gt;/&lt;experiment&gt;</code>, or
+<code>&lt;SOURCE&gt;/&lt;model&gt;-&lt;scenario&gt;/&lt;experiment&gt;</code> for CMIP6/CMIP6_raw.</p>
+<h3 id="outputanalyses_dir-has-no-default"><code>output.analyses_dir</code> has no default</h3>
+<p>There is no <code>./analyses</code> fallback. The value is expanded from
+<code>OCEANICU_ANALYSES_FOLDER</code> in this machine's data-roots file
+(<code>&lt;hostname&gt;_ocean-post_data_roots.yaml</code>), or set directly with
+<code>--analyses-dir</code>. If neither is set, the run stops with an error naming the
+missing variable.</p>
+<h2 id="common-command-line-flags">Common command-line flags</h2>
+<p>All six scripts accept:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--config FILE</code></td>
+<td>YAML config file</td>
+</tr>
+<tr>
+<td><code>--area NAME</code></td>
+<td>Override area</td>
+</tr>
+<tr>
+<td><code>--experiment NAME</code></td>
+<td>Override experiment (the run folder when <code>--source</code> is used)</td>
+</tr>
+<tr>
+<td><code>--source NAME</code></td>
+<td>Model source from <code>config/sources.yaml</code> (e.g. CMEMS, WOA, CMIP6, CMIP6_raw)</td>
+</tr>
+<tr>
+<td><code>--model NAME</code> / <code>--scenario NAME</code></td>
+<td>CMIP6/CMIP6_raw model and scenario</td>
+</tr>
+<tr>
+<td><code>--years START END</code></td>
+<td>Override year range</td>
+</tr>
+<tr>
+<td><code>--variables VAR …</code></td>
+<td>Override variables</td>
+</tr>
+<tr>
+<td><code>--analyses-dir DIR</code></td>
+<td>Override <code>output.analyses_dir</code> (otherwise required via <code>OCEANICU_ANALYSES_FOLDER</code>)</td>
+</tr>
+<tr>
+<td><code>--no-staging</code></td>
+<td>Skip writing to simulation registry</td>
+</tr>
+<tr>
+<td><code>--dryrun</code></td>
+<td>Print configuration summary and exit without running</td>
+</tr>
+</tbody>
+</table>
+<p>Script-specific flags:</p>
+<ul>
+<li><code>argo-profiles</code>, <code>wod-profiles</code>, <code>cruise-ctd-profiles</code>: no extra flags</li>
+<li><code>glodap-profiles</code>, <code>ices-profiles</code>: <code>--no-model</code> (skip model comparison, obs diagnostics only)</li>
+<li><code>fixed-platform</code>: <code>--list-platforms</code> (survey mode), <code>--platform INDEX_OR_LAT,LON</code>, <code>--min-obs N</code></li>
+</ul>
+<h2 id="what-each-run-produces">What each run produces</h2>
+<div class="codehilite"><pre><span></span><code>&lt;OCEANICU_ANALYSES_FOLDER&gt;/areas/&lt;AREA&gt;/validations/&lt;SOURCE&gt;/&lt;experiment&gt;/
+├── plots/
+│   └── physics/               ← physics | bio
+│       └── pyGETM/
+│           └── &lt;period&gt;/      ← e.g. 2020-2022
+│               └── argo/      ← or glodap/, wod/, cruise/, ices/, platform/
+│                   ├── &lt;prefix&gt;_overview.png
+│                   ├── &lt;prefix&gt;_hovmoller_TEMP.png
+│                   └── &lt;prefix&gt;_profiles_YYYY.png
+└── tables/
+    └── physics/
+        └── pyGETM/
+            └── argo/
+                └── &lt;prefix&gt;_profile_validation_statistics.txt
+</code></pre></div>
+
+<p>For <code>CMIP6</code>/<code>CMIP6_raw</code>, the path is
+<code>.../&lt;SOURCE&gt;/&lt;model&gt;-&lt;scenario&gt;/&lt;experiment&gt;/...</code>.</p>
+<p>The overview figure typically has 6 panels:
+- float/station/cruise map coloured by platform or time
+- temperature vs depth scatter
+- salinity vs depth scatter
+- T-S diagram
+- mean vertical profiles (normalised)
+- profile or observation count per platform</p>
+<h2 id="running-multiple-experiments">Running multiple experiments</h2>
+<p>Run the script once per experiment/run folder:</p>
+<div class="codehilite"><pre><span></span><code>argo-profiles<span class="w"> </span>--config<span class="w"> </span>config/argo_profiles.yaml<span class="w"> </span>--source<span class="w"> </span>CMEMS<span class="w"> </span>--experiment<span class="w"> </span>run01
+argo-profiles<span class="w"> </span>--config<span class="w"> </span>config/argo_profiles.yaml<span class="w"> </span>--source<span class="w"> </span>WOA<span class="w"> </span>--experiment<span class="w"> </span>run01
+argo-profiles<span class="w"> </span>--config<span class="w"> </span>config/argo_profiles.yaml<span class="w"> </span>--source<span class="w"> </span>CMIP6_raw<span class="w"> </span>--model<span class="w"> </span>GFDL-ESM4<span class="w"> </span>--scenario<span class="w"> </span>ssp126<span class="w"> </span>--experiment<span class="w"> </span>run01
+</code></pre></div>
+
+<h2 id="generating-residuals-for-mle-comparison">Generating residuals for MLE comparison</h2>
+<p><code>save_residuals</code> is enabled by default (<code>true</code>).  Each run writes a parquet
+file alongside the standard validation outputs:</p>
+<div class="codehilite"><pre><span></span><code>&lt;OCEANICU_ANALYSES_FOLDER&gt;/areas/&lt;AREA&gt;/validations/&lt;SOURCE&gt;/&lt;experiment&gt;/argo_residuals.parquet
+</code></pre></div>
+
+<p>The parquet has columns: <code>time</code>, <code>lat</code>, <code>lon</code>, <code>depth</code>, <code>variable</code>, <code>value</code>
+(obs), <code>model_value</code>, and optionally <code>profile_id</code>.</p>
+<p>To disable:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">save_residuals</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span>
+</code></pre></div>
+
+<h3 id="vertical-thinning-to-reduce-autocorrelation">Vertical thinning to reduce autocorrelation</h3>
+<p>Adjacent depth levels in a profile are strongly correlated, which violates
+the MLE independence assumption.  Use <code>vertical_thinning</code> to thin before
+writing the parquet:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">save_residuals</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">vertical_thinning</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">min_spacing</span><span class="w">   </span><span class="c1"># none (default) | min_spacing | stride</span>
+<span class="w">    </span><span class="nt">spacing_m</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">25.0</span><span class="w">       </span><span class="c1"># for min_spacing: min metres between kept levels</span>
+<span class="w">    </span><span class="c1"># stride: 3           # for stride: keep every N-th depth level</span>
+</code></pre></div>
+
+<ul>
+<li><strong><code>min_spacing</code></strong> — greedy algorithm: walk depths sorted ascending and keep
+  a level only when it is ≥ <code>spacing_m</code> below the last kept level.  Handles
+  irregular Argo/ICES spacing naturally; recommended for most use cases.</li>
+<li><strong><code>stride</code></strong> — keep every N-th unique depth within each profile.  Faster
+  but assumes levels are roughly evenly spaced.</li>
+</ul>
+<p>Thinning is applied per-cast (all variables in the same cast get the same
+depth levels selected), so TEMP and PSAL remain matched.</p>
+<p>See <a href="mle-comparison.html">guides/mle-comparison.md</a> for the ranking workflow.</p>
+<h2 id="glodap-specific-notes">GLODAP-specific notes</h2>
+<p>The GLODAP v2.2023 merged master file (~300 MB) is downloaded automatically on
+first run and cached locally.  Set <code>glodap.cache_dir</code> in the config to control
+where it lands:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">glodap</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">cache_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;${CACHE_ROOT}/glodap&quot;</span>
+<span class="w">  </span><span class="nt">qc_flags</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2</span><span class="p p-Indicator">]</span><span class="w">   </span><span class="c1"># 2 = good data; 0 includes unqualified</span>
+</code></pre></div>
+
+<p>Pass <code>--no-model</code> to produce observation-only diagnostics (station map, T-S
+diagram, profile climatology) without loading any model output.</p>
+<h2 id="ices-feather-file-notes">ICES feather-file notes</h2>
+<p><code>ices-profiles</code> reads pre-exported ICES/ECOVAL quality-controlled profiles from
+local Apache Arrow Feather files, under <code>observations.data_dir</code>
+(e.g. <code>${ECOVAL_FOLDER}/point/nws/all</code>):</p>
+<div class="codehilite"><pre><span></span><code>&lt;observations.data_dir&gt;/
+├── temperature/
+│   └── *_temperature_&lt;year&gt;.feather
+├── salinity/
+│   └── *_salinity_&lt;year&gt;.feather
+└── …
+</code></pre></div>
+
+<p>Unlike the ERDDAP-based scripts, no network access is required — data must
+be exported from the ICES Oceanographic Database (or ECOVAL) in advance.</p>
+<p>Pass <code>--no-model</code> to produce observation-only diagnostics.</p>
+<h2 id="fixed-platform-notes">Fixed-platform notes</h2>
+<p><code>fixed-platform</code> reads EMODnet Chemistry fixed-platform (mooring/buoy)
+vertical profiles via ERDDAP. Unlike scattered cruise CTD casts, a platform
+collects repeated profiles at the same position over time, so the output
+includes Hovmoller diagrams (time × depth), fixed-depth time series, and
+seasonal depth structure.</p>
+<p>Because a domain can contain many platforms, the workflow is a two-step
+survey-then-analyse:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Step 1 — survey: list all platforms in the domain, no heavy analysis</span>
+fixed-platform<span class="w"> </span>--config<span class="w"> </span>config/fixed_platform.yaml<span class="w"> </span>--list-platforms
+
+<span class="c1"># Step 2 — analyse: pick a platform by rank from the inventory table...</span>
+fixed-platform<span class="w"> </span>--config<span class="w"> </span>config/fixed_platform.yaml<span class="w"> </span>--platform<span class="w"> </span><span class="m">3</span>
+
+<span class="c1"># ...or by coordinates</span>
+fixed-platform<span class="w"> </span>--config<span class="w"> </span>config/fixed_platform.yaml<span class="w"> </span>--platform<span class="w"> </span><span class="m">51</span>.3,2.9
+</code></pre></div>
+
+<p><code>--min-obs N</code> pre-filters platform clusters with fewer than <code>N</code>
+observations before ranking.</p></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

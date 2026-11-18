@@ -1,0 +1,416 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>River Flow and Nutrient Load Projection Guide · ocean-* documentation</title>
+<meta name="description" content="River Flow and Nutrient Load Projection Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="index.html" aria-current="page">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-post</a></div><h1>River Flow and Nutrient Load Projection Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-post</h2><ul><li><a href="index.html">Overview</a></li><li><a href="run-validation.html">run-analyses Guide</a></li><li><a href="gridded-2d-validation.html">Gridded 2D Validation Guide</a></li><li><a href="gridded-3d-validation.html">Gridded 3D Validation Guide</a></li><li><a href="profile-validation.html">Profile Validation Guide</a></li><li><a href="tidal-analysis.html">Tidal Analysis Guide</a></li><li><a href="mle-comparison.html">MLE Cross-Experiment Comparison Guide</a></li><li><a href="scenarios.html">Scenario Analysis Guide</a></li><li><a href="river-projection.html" aria-current="page">River Flow and Nutrient Load Projection Guide</a></li><li><a href="regridding.html">Regridding User Guide</a></li><li><a href="simulation-list.html">Simulation List Guide</a></li><li><a href="statistics-db.html">Statistics Database Guide</a></li><li><a href="manage-analyses.html">manage-analyses Guide</a></li><li><a href="reporting.html">Reporting Guide</a></li></ul></aside><article class="doc"><h1 id="river-flow-and-nutrient-load-projection-guide">River Flow and Nutrient Load Projection Guide</h1>
+<blockquote>
+<p><strong><code>river-projection</code> (stage 1, below) lives in <code>ocean-prep</code></strong>, alongside
+<code>bc-correct</code>/<code>bc-diagnostics</code> — install and run it from the <code>ocean-prep</code>
+repo (<code>cli/river_projection.py</code>), with its config at
+<code>ocean-prep/config/river_projection_example.yaml</code>. <code>river-diagnostics</code>
+(stage 2) stays in <code>ocean-post</code>. Confirmed 2026-10-07; this page previously
+referenced a <code>config/river_projection.yaml</code> in <code>ocean-post</code> that was never
+there, and the real tool and config were found in <code>ocean-prep</code> instead. No
+project-specific copy of the config exists yet in this checkout — the only
+one found is <code>ocean-prep</code>'s own example.</p>
+</blockquote>
+<h2 id="overview">Overview</h2>
+<p>This guide describes how to project future river flows and nutrient loadings
+using the <strong>delta-change method</strong>: bias-corrected gridded precipitation (P) and
+evapotranspiration (E) from CMIP6 are used to scale the observed seasonal
+discharge cycle from the EMORID dataset forward in time.  Nutrient loads are
+then computed by multiplying projected discharge by an observed
+flow-weighted mean concentration.</p>
+<div class="codehilite"><pre><span></span><code>EMORID observed Q + nutrients
+        │
+        ├─── monthly Q climatology ──────────────────────────┐
+        │    (calibration period)                            │
+        │                                                    ▼
+ERA5 P, E (reference)                            Q_future = Q_clim(month) × ΔPE(t)
+        │                                                    │
+        └─── P–E climatology ────────────────► ΔPE(t)       │
+             (calibration period, denominator)               │
+                                                             │
+BC future P, E (CMIP6)                                       ▼
+        │                                        nutrient loads = Q_future × FWMC
+        └─── future P–E ──────────────────────► (numerator)
+</code></pre></div>
+
+<h3 id="commands">Commands</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Stage 1 (ocean-prep): project future flows and nutrient loads</span>
+river-projection<span class="w"> </span>--config<span class="w"> </span>config/river_projection_example.yaml<span class="w"> </span>--model<span class="w"> </span>MPI-ESM1-2-HR<span class="w"> </span>--scenario<span class="w"> </span>ssp245
+river-projection<span class="w"> </span>--config<span class="w"> </span>config/river_projection_example.yaml<span class="w"> </span>--model<span class="w"> </span>MPI-ESM1-2-HR<span class="w"> </span>--scenario<span class="w"> </span>ssp585
+river-projection<span class="w"> </span>--config<span class="w"> </span>config/river_projection_example.yaml<span class="w"> </span>--model<span class="w"> </span>MPI-ESM1-2-HR<span class="w"> </span>--scenario<span class="w"> </span>ssp245<span class="w"> </span>--dryrun
+river-projection<span class="w"> </span>--config<span class="w"> </span>config/river_projection_example.yaml<span class="w"> </span>--model<span class="w"> </span>MPI-ESM1-2-HR<span class="w"> </span>--scenario<span class="w"> </span>ssp245<span class="w"> </span>--allow-missing
+
+<span class="c1"># Stage 2 (ocean-post): generate diagnostic plots and tables from the projection output</span>
+river-diagnostics<span class="w"> </span>--config<span class="w"> </span>config/river_projection_example.yaml<span class="w"> </span>--model<span class="w"> </span>MPI-ESM1-2-HR<span class="w"> </span>--scenario<span class="w"> </span>ssp245
+river-diagnostics<span class="w"> </span>--config<span class="w"> </span>config/river_projection_example.yaml<span class="w"> </span>--model<span class="w"> </span>MPI-ESM1-2-HR<span class="w"> </span>--scenario<span class="w"> </span>ssp245<span class="w"> </span>--analyses-dir<span class="w"> </span>/data/local/analyses
+</code></pre></div>
+
+<p><code>--model</code> is required by <code>river-projection</code> (either <code>metadata.model</code> in the
+config or <code>--model</code>) — it resolves <code>{model}</code> in the forcing and output paths
+alongside <code>--scenario</code>.</p>
+<p>Config on GitHub: <code>config/river_projection_example.yaml</code> (in <code>ocean-prep</code>)</p>
+<hr />
+<h2 id="input-data">Input data</h2>
+<table>
+<thead>
+<tr>
+<th>Dataset</th>
+<th>Location</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>EMORID observed flows</td>
+<td><code>${EMORID_FOLDER}/to_netcdf/EMORID_1990_2024.nc</code></td>
+<td>daily Q + nutrients</td>
+</tr>
+<tr>
+<td>ERA5 precipitation</td>
+<td><code>${ERA5_FOLDER}/era5_tp_{year}.nc</code></td>
+<td>Hourly accumulation (m), variable <code>tp</code> — reference P–E climatology</td>
+</tr>
+<tr>
+<td>ERA5 evaporation</td>
+<td><code>${ERA5_FOLDER}/era5_e_{year}.nc</code></td>
+<td>Hourly accumulation (m), variable <code>e</code>, <strong>negative</strong> for upward flux</td>
+</tr>
+<tr>
+<td>BC future P/E (separate)</td>
+<td>from <code>bc-correct</code> (ocean-prep)</td>
+<td>Daily, one file per year, variables <code>pr</code>/<code>evspsbl</code> (kg m⁻² s⁻¹)</td>
+</tr>
+<tr>
+<td>BC future P−E (composite)</td>
+<td>from <code>bc-correct</code> (ocean-prep)</td>
+<td>Jointly corrected <code>pe</code>, preferred over separate pr/evspsbl when present — see "The pe composite" below</td>
+</tr>
+</tbody>
+</table>
+<p>EMORID variables available: Q, TotalN, NO3, NH4, DIN, TotalP, PO4, Si, DOC, DIC, SPM.
+Countries covered: 18 (NE Atlantic and Baltic rim).</p>
+<hr />
+<h2 id="method">Method</h2>
+<h3 id="step-1--station-filtering">Step 1 — Station filtering</h3>
+<p>Stations are filtered to retain only those with ≥ <code>min_years</code> (default 10) of
+valid daily Q.  This removes gauges with very short or mostly-missing records
+that would produce unreliable climatologies.</p>
+<p>Stations in Norway, Finland, Sweden, and Iceland are flagged with
+<code>regulated_flag = True</code> in the output but are <strong>not excluded</strong>.  Rivers in
+these countries are heavily influenced by snowmelt timing and hydropower
+operations, so the P–E relationship does not hold as reliably as for
+rainfall-dominated catchments.  Projections for flagged stations should be
+interpreted with caution.</p>
+<h3 id="step-2--associate-stations-with-gridded-pe">Step 2 — Associate stations with gridded P–E</h3>
+<p>Each station is paired with the nearest grid cell in the ERA5 P and E fields
+(for the climatology) and the bias-corrected future P and E fields (for the
+projection) using nearest-neighbour selection on (lat, lon).</p>
+<p>This is a practical approximation: in the absence of catchment boundary
+polygons the point extraction captures the local climate signal but not
+the integrated catchment response.  A future improvement would ingest
+catchment boundary polygons (e.g. HydroSHEDS) and compute proper
+area-weighted P–E over each drainage basin.  The delta-change method is
+robust to this approximation because it relies only on the <em>relative</em>
+change in P–E, not its absolute value.</p>
+<h3 id="step-3--monthly-pe-climatology-calibration-period">Step 3 — Monthly P–E climatology (calibration period)</h3>
+<p>The mean monthly P–E at each station is computed over the calibration period
+(e.g. 1990–2019) from <strong>ERA5</strong>, which is the observational reference:</p>
+<div class="codehilite"><pre><span></span><code>PE_ref_clim(m) = mean over t in calibration period of [P_ERA5(t) - E_ERA5(t)]
+                 where month(t) = m
+</code></pre></div>
+
+<p>This 12-value climatology forms the denominator of the delta-change factor.</p>
+<p><strong>Why ERA5 and not bias-corrected historical?</strong>  The BC future files are
+anchored to the ERA5 climatological distribution by construction.  Dividing
+the future P–E by the ERA5 climatology therefore recovers the pure CMIP6
+climate-change signal.  Bias-corrected historical files would give the same
+result (ERA5 ≈ BC-historical by construction) and are not needed.</p>
+<p><strong>ERA5 units and sign convention:</strong> ERA5 <code>tp</code>/<code>e</code> are hourly accumulations
+in metres; CMIP6's bias-corrected <code>pr</code>/<code>evspsbl</code> are daily-mean fluxes in
+kg m⁻² s⁻¹. Both ERA5 variables are resampled to daily totals
+(<code>resample: daily</code>, summing the 24 hourly values) and then scaled by
+<code>0.011574</code> (= 1000/86400/24) to match that flux convention. ERA5 <code>e</code> is
+also stored as a <em>negative</em> accumulation (upward flux = surface loss), so
+its scale factor is <code>-0.011574</code> — the sign flip and the unit conversion
+combined into one number.</p>
+<h3 id="step-4--observed-monthly-q-climatology-calibration-period">Step 4 — Observed monthly Q climatology (calibration period)</h3>
+<p>The mean monthly observed discharge at each station is computed from EMORID
+over the same calibration period:</p>
+<div class="codehilite"><pre><span></span><code>Q_clim(m) = mean over t in calibration period of Q_obs(t)
+             where month(t) = m
+</code></pre></div>
+
+<p>This is the baseline seasonal cycle that the delta-change method preserves.</p>
+<h3 id="step-5--delta-change-factor">Step 5 — Delta-change factor</h3>
+<p>For each future time step t the delta-change factor is:</p>
+<div class="codehilite"><pre><span></span><code>ΔPE(t) = PE_future(t) / PE_hist_clim(month(t))
+</code></pre></div>
+
+<p>where <code>PE_future(t) = P_future(t) − E_future(t)</code> from the bias-corrected
+future forcing.</p>
+<p><strong>Interpretation:</strong> ΔPE(t) = 1.2 means the future P–E in that month is 20 %
+higher than the historical climatological value, so the projected discharge is
+also 20 % higher.</p>
+<p><strong>Handling non-positive P–E:</strong> In arid regions or summer months, the
+historical P–E climatology can be zero or negative (evaporation exceeds
+precipitation).  Division by a non-positive value is physically undefined for
+this method; those cells are set to ΔPE = 1.0 (no change) and logged as
+warnings.  If many stations trigger this condition, consider extending the
+calibration period or reviewing the evaporation variable.</p>
+<h3 id="step-6--projected-river-discharge">Step 6 — Projected river discharge</h3>
+<div class="codehilite"><pre><span></span><code>Q_future(t) = Q_clim(month(t)) × ΔPE(t)
+</code></pre></div>
+
+<p>Values are clipped to zero (no negative discharge).</p>
+<p><strong>Why delta-change rather than a full rainfall-runoff model?</strong>  The delta-change
+method preserves the observed seasonal cycle and inter-annual variability
+pattern of discharge without requiring catchment area, soil parameters, or
+routing.  It applies only the climate-driven fractional change in water
+availability (P–E) to the observed flow.  The method is widely used for
+first-order assessments when catchment characteristics are not available.</p>
+<h3 id="step-7--flow-weighted-mean-concentration-fwmc">Step 7 — Flow-weighted mean concentration (FWMC)</h3>
+<p>For each nutrient species and station:</p>
+<div class="codehilite"><pre><span></span><code>FWMC = Σ(Q(t) × C(t)) / Σ(Q(t))   over the FWMC period
+</code></pre></div>
+
+<p>The FWMC period is configured independently from the calibration period.
+<strong>Use a recent sub-period</strong> (e.g. 2010–2023) rather than the full record to
+reflect current nutrient conditions; older data from the 1990s may
+overestimate future loads in rivers that have improved under EU nutrient
+directives such as the Water Framework Directive and Nitrates Directive.</p>
+<p>Both Q and C must be finite for a time step to enter the sum.  Stations with
+no valid Q–C overlap for a given nutrient receive <code>FWMC = NaN</code> and are
+excluded from load projections for that nutrient.</p>
+<h3 id="step-8--projected-nutrient-loads">Step 8 — Projected nutrient loads</h3>
+<div class="codehilite"><pre><span></span><code>Load_future(t) = Q_future(t) × FWMC   [kg s⁻¹ if C in kg m⁻³]
+</code></pre></div>
+
+<p>This assumes in-catchment nutrient sources and in-stream processing remain
+at their current level.  This is a conservative baseline; a separate scenario
+analysis can relax it by applying trend-based or policy-driven adjustments to
+FWMC.</p>
+<hr />
+<h2 id="configuration">Configuration</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># ocean-prep/config/river_projection_example.yaml</span>
+
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">scenario</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssp126</span><span class="w">           </span><span class="c1"># override at run time with --scenario</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">MPI-ESM1-2-HR</span><span class="w">    </span><span class="c1"># override at run time with --model</span>
+
+<span class="nt">emorid</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;${EMORID_FOLDER}/to_netcdf/EMORID_1990_2024.nc&quot;</span>
+
+<span class="nt">station_filter</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">min_years</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">        </span><span class="c1"># minimum years of valid daily Q</span>
+
+<span class="nt">calibration</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1990-01-01&quot;</span>
+<span class="w">  </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2019-12-31&quot;</span>
+
+<span class="nt">future</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2015-01-01&quot;</span>
+<span class="w">  </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2099-12-31&quot;</span>
+
+<span class="nt">fwmc</span><span class="p">:</span><span class="w">                  </span><span class="c1"># period for flow-weighted mean concentrations</span>
+<span class="w">  </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2010-01-01&quot;</span><span class="w">  </span><span class="c1"># omit this block to use the full EMORID record</span>
+<span class="w">  </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2023-12-31&quot;</span>
+
+<span class="nt">nutrients</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TotalN</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TotalP</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">DIN</span>
+
+<span class="nt">domain</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-20.0</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">40.0</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">45.0</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">75.0</span>
+
+<span class="nt">forcing</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># ERA5: denominator of the delta-change factor (P–E climatology).</span>
+<span class="w">  </span><span class="nt">reference</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">pr</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w">         </span><span class="s">&quot;${ERA5_FOLDER}/era5_tp_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">tp</span>
+<span class="w">      </span><span class="nt">scale_factor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.011574</span><span class="w">    </span><span class="c1"># hourly accumulation (m) → daily kg m⁻² s⁻¹</span>
+<span class="w">      </span><span class="nt">resample</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">daily</span><span class="w">       </span><span class="c1"># hourly → daily sum</span>
+<span class="w">    </span><span class="nt">evspsbl</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w">         </span><span class="s">&quot;${ERA5_FOLDER}/era5_e_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">e</span>
+<span class="w">      </span><span class="nt">scale_factor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-0.011574</span><span class="w">   </span><span class="c1"># sign flip (ERA5 e is negative) + unit conversion</span>
+<span class="w">      </span><span class="nt">resample</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">daily</span>
+
+<span class="w">  </span><span class="c1"># BC future: numerator of the delta-change factor. {model}/{scenario}</span>
+<span class="w">  </span><span class="c1"># substituted from metadata/--model/--scenario; {method} (regridding</span>
+<span class="w">  </span><span class="c1"># method, e.g. qdm/bilinear) is left as a glob (*) rather than hardcoded,</span>
+<span class="w">  </span><span class="c1"># since pr and evspsbl may use different methods.</span>
+<span class="w">  </span><span class="nt">future</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">pr</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${BIAS_CORRECTED_FOLDER}/CMIP6/{model}/{scenario}/meteo/pr_bc_*_{scenario}_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pr</span>
+<span class="w">    </span><span class="nt">evspsbl</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${BIAS_CORRECTED_FOLDER}/CMIP6/{model}/{scenario}/meteo/evspsbl_bc_*_{scenario}_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">evspsbl</span>
+<span class="w">    </span><span class="c1"># Jointly bias-corrected P-E composite, preferred over separate pr −</span>
+<span class="w">    </span><span class="c1"># evspsbl when present (auto-detected by real file presence per</span>
+<span class="w">    </span><span class="c1"># model/scenario — not every model produces it, e.g. GFDL-ESM4&#39;s CMIP6</span>
+<span class="w">    </span><span class="c1"># hfls is Amon-only). See &quot;The pe composite&quot; below.</span>
+<span class="w">    </span><span class="nt">pe</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${BIAS_CORRECTED_FOLDER}/CMIP6/{model}/{scenario}/meteo/pe_bc_*_{scenario}_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pe</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">dir</span><span class="p">:</span><span class="w">          </span><span class="s">&quot;${BIAS_CORRECTED_FOLDER}/CMIP6/{model}/{scenario}/rivers&quot;</span>
+<span class="w">  </span><span class="nt">compress</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">analyses_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;${OCEANICU_ANALYSES_FOLDER}&quot;</span><span class="w">  </span><span class="c1"># not used by river-projection itself today —</span>
+<span class="w">                                                 </span><span class="c1"># a placeholder for river-diagnostics (stage 2)</span>
+</code></pre></div>
+
+<p><code>{model}</code> and <code>{scenario}</code> in the future forcing paths and <code>output.dir</code> are
+substituted at runtime from <code>metadata.model</code>/<code>metadata.scenario</code> (or
+<code>--model</code>/<code>--scenario</code>).  This makes it straightforward to run multiple
+models and SSPs from the one shared config:</p>
+<div class="codehilite"><pre><span></span><code><span class="k">for</span><span class="w"> </span>scenario<span class="w"> </span><span class="k">in</span><span class="w"> </span>ssp126<span class="w"> </span>ssp370<span class="w"> </span>ssp585<span class="p">;</span><span class="w"> </span><span class="k">do</span>
+<span class="w">    </span>river-projection<span class="w"> </span>--config<span class="w"> </span>config/river_projection_example.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">        </span>--model<span class="w"> </span>MPI-ESM1-2-HR<span class="w"> </span>--scenario<span class="w"> </span><span class="nv">$scenario</span>
+<span class="k">done</span>
+</code></pre></div>
+
+<h3 id="the-pe-composite">The <code>pe</code> composite</h3>
+<p>When <code>forcing.future.pe</code> is present in the config, <code>river-projection</code> probes
+for real output at that path for the current <code>--model</code>/<code>--scenario</code> before
+using it: if found, it uses the jointly bias-corrected P−E composite instead
+of separately-corrected <code>pr</code> − <code>evspsbl</code> (separate correction does not
+guarantee the <em>difference</em> preserves ERA5's own P–E climatology). If no
+<code>pe</code> output exists for that model/scenario, it logs this and falls back to
+<code>pr</code>/<code>evspsbl</code> automatically — the same shared config works for every model
+via <code>--model</code> without a per-model variant.</p>
+<hr />
+<h2 id="output">Output</h2>
+<p>Two NetCDF files are written per run, both with dimensions <code>(site, time)</code>:</p>
+<table>
+<thead>
+<tr>
+<th>File</th>
+<th>Variables</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>river_flows_future_&lt;scenario&gt;.nc</code></td>
+<td><code>Q</code>, <code>regulated_flag</code></td>
+<td>Projected monthly discharge (m³ s⁻¹)</td>
+</tr>
+<tr>
+<td><code>nutrient_loads_future_&lt;scenario&gt;.nc</code></td>
+<td>TotalN, TotalP, DIN, …</td>
+<td>Projected loads (kg s⁻¹)</td>
+</tr>
+</tbody>
+</table>
+<p>Global attributes record the scenario name, calibration and future periods,
+and the FWMC period. These are written to <code>output.dir</code> (not into the
+<code>analyses_dir</code>/validations tree) — <code>output.analyses_dir</code> in the config is
+not used by <code>river-projection</code> itself; it only matters to <code>river-diagnostics</code>
+below.</p>
+<hr />
+<h2 id="diagnostics">Diagnostics</h2>
+<p>After running <code>river-projection</code>, use <code>river-diagnostics</code> (<code>ocean-post</code>) to
+generate plots and tables from the projection output.  It reads the same
+config file (for <code>metadata</code>, <code>emorid</code>, and <code>output.dir</code>) and writes into
+the canonical analyses layout:</p>
+<div class="codehilite"><pre><span></span><code>&lt;analyses_dir&gt;/scenarios/&lt;model&gt;/&lt;scenario&gt;/river/
+    plots/
+        q_change_map_&lt;scenario&gt;.png      # station map coloured by % Q change
+        q_time_series_&lt;scenario&gt;.png     # annual mean Q: calibration + near/mid/far future
+        q_seasonal_&lt;scenario&gt;.png        # monthly Q climatology by period
+        nutrient_loads_&lt;scenario&gt;.png    # annual nutrient load time series
+    tables/
+        river_projection_statistics_&lt;scenario&gt;.csv
+        river_projection_statistics_&lt;scenario&gt;.txt
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>river-diagnostics<span class="w"> </span>--config<span class="w"> </span>config/river_projection_example.yaml<span class="w"> </span>--model<span class="w"> </span>MPI-ESM1-2-HR<span class="w"> </span>--scenario<span class="w"> </span>ssp245
+river-diagnostics<span class="w"> </span>--config<span class="w"> </span>config/river_projection_example.yaml<span class="w"> </span>--model<span class="w"> </span>MPI-ESM1-2-HR<span class="w"> </span>--scenario<span class="w"> </span>ssp585
+river-diagnostics<span class="w"> </span>--config<span class="w"> </span>config/river_projection_example.yaml<span class="w"> </span>--model<span class="w"> </span>MPI-ESM1-2-HR<span class="w"> </span>--scenario<span class="w"> </span>ssp245<span class="w"> </span>--analyses-dir<span class="w"> </span>/data/local/analyses
+</code></pre></div>
+
+<p><code>--analyses-dir</code> overrides <code>output.analyses_dir</code> from the config and has no
+<code>./analyses</code> fallback — see
+<a href="tidal-analysis.html">Tidal Analysis: analyses_dir has no default</a>.
+<code>--scenario</code> and <code>--model</code> override the corresponding metadata keys.</p>
+<p>The diagnostics are automatically picked up by <code>ocean-reporting</code> and included
+in the Hugo scenarios page under a <strong>River Flow and Nutrient Load Projections</strong>
+section.</p>
+<hr />
+<h2 id="dry-run">Dry run</h2>
+<p>Use <code>--dryrun</code> to check the config and probe forcing-file existence (every
+probed year, for both ERA5 reference and BC future — plus the <code>pe</code> auto-
+detect probe when configured) without loading any data:</p>
+<div class="codehilite"><pre><span></span><code>river-projection<span class="w"> </span>--config<span class="w"> </span>config/river_projection_example.yaml<span class="w"> </span>--model<span class="w"> </span>MPI-ESM1-2-HR<span class="w"> </span>--scenario<span class="w"> </span>ssp245<span class="w"> </span>--dryrun
+</code></pre></div>
+
+<p>Both <code>--dryrun</code> and a real run exit non-zero if any probed year is missing —
+a config/filename mismatch is meant to fail loudly, not silently degrade the
+projection. Pass <code>--allow-missing</code> only for genuinely partial, expected
+coverage (e.g. a scenario whose later years are not produced yet).</p>
+<hr />
+<h2 id="limitations-and-future-improvements">Limitations and future improvements</h2>
+<table>
+<thead>
+<tr>
+<th>Limitation</th>
+<th>Impact</th>
+<th>Potential improvement</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Nearest-neighbour P–E extraction</td>
+<td>Ignores catchment shape; grid noise can affect individual stations</td>
+<td>Ingest HydroSHEDS catchment polygons and compute area-weighted P–E</td>
+</tr>
+<tr>
+<td>Constant FWMC</td>
+<td>Does not capture land-use change or emission trends</td>
+<td>Fit a trend to historical C(t) and extrapolate; or apply emission scenario adjustments</td>
+</tr>
+<tr>
+<td>Regulated rivers flagged but not excluded</td>
+<td>Delta-change projections less physically meaningful for snowmelt / hydropower dominated basins</td>
+<td>Separate treatment using temperature-based snowmelt model</td>
+</tr>
+<tr>
+<td>No uncertainty from FWMC</td>
+<td>Single FWMC value per station</td>
+<td>Bootstrap confidence intervals on FWMC from the observed record</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="key-references">Key references</h2>
+<ul>
+<li>Arnell (1999), <em>Climate change and global water resources</em>, Global
+  Environmental Change <strong>9</strong>, S31–S49. — Foundation of the delta-change
+  approach for river flow projections.</li>
+<li>Middelkoop et al. (2001), <em>Impact of climate change on hydrological regimes
+  and water resources management in the Rhine basin</em>, Climatic Change <strong>49</strong>,
+  105–128. — Applied delta-change example.</li>
+<li>Kronvang et al. (2009), <em>Nitrogen and phosphorus losses from agricultural
+  areas in European river basins</em>, Science of the Total Environment. — FWMC
+  methodology context for riverine nutrient loads.</li>
+</ul></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tidal + CMIP6 mean boundary conditions · ocean-* documentation</title>
+<meta name="description" content="Tidal + CMIP6 mean boundary conditions">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="index.html" aria-current="page">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-prep</a></div><h1>Tidal + CMIP6 mean boundary conditions</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-prep</h2><ul><li><a href="index.html">Overview</a></li><li><a href="model-setup.html">Model Setup Guide</a></li><li><a href="bathymetry.html">Bathymetry Guide</a></li><li><a href="boundaries-cmems.html">CMEMS Boundary Conditions Guide</a></li><li><a href="boundaries-cmip6.html">CMIP6 Boundary Conditions Guide</a></li><li><a href="tidal-boundaries.html" aria-current="page">Tidal + CMIP6 mean boundary conditions</a></li><li><a href="delta-change-boundaries.html">Delta-change boundary conditions</a></li><li><a href="boundary-diagnostics.html">Boundary Diagnostics Guide</a></li><li><a href="initial-conditions.html">Initial Conditions Guide</a></li><li><a href="radiation-bc.html">Radiation Bias Correction Guide</a></li><li><a href="humidity-bc.html">Humidity Bias Correction Guide</a></li><li><a href="bias-correction-guide.html">Bias Correction of Atmospheric Forcings — User &amp; Technical Guide</a></li></ul></aside><article class="doc"><h1 id="tidal--cmip6-mean-boundary-conditions">Tidal + CMIP6 mean boundary conditions</h1>
+<p>Guide for <code>run-tidal-boundaries</code> — hourly SSH and barotropic transport
+boundary files for future climate projections.</p>
+<hr />
+<h2 id="overview">Overview</h2>
+<p>For future climate simulations the boundary SSH and barotropic transport are
+split into two components:</p>
+<table>
+<thead>
+<tr>
+<th>Component</th>
+<th>Source</th>
+<th>Frequency</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tidal signal</td>
+<td>TPXO9 harmonic prediction</td>
+<td>hourly</td>
+</tr>
+<tr>
+<td>Mean (non-tidal) sea level + transport</td>
+<td>CMIP6 monthly mean</td>
+<td>hourly (interpolated from monthly)</td>
+</tr>
+</tbody>
+</table>
+<p>The output variables (<code>zos</code>, <code>uo</code>, <code>vo</code>) are all on the T-grid (boundary point
+index <code>nbdyp</code>), consistent with how CMEMS boundaries are structured.</p>
+<p>What is added to the TPXO9 tide is set by the optional <code>background</code> section:</p>
+<table>
+<thead>
+<tr>
+<th><code>background.type</code></th>
+<th>Added to the tide</th>
+<th>Needs</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cmip6</code> (default when the config has a <code>cmip6</code> section)</td>
+<td>CMIP6 monthly mean minus its historical mean</td>
+<td><code>cmip6:</code></td>
+</tr>
+<tr>
+<td><code>file</code></td>
+<td><code>zos</code>/<code>uo</code>/<code>vo</code> of a given boundary file, interpolated in time</td>
+<td><code>background.file</code></td>
+</tr>
+<tr>
+<td><code>none</code> (default without <code>cmip6</code>)</td>
+<td>nothing: the tide alone, as pyGETM computes it online from TPXO9</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<div class="codehilite"><pre><span></span><code><span class="nt">background</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">file</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/.../my_boundary.nc</span><span class="w">   </span><span class="c1"># same boundary points (nbdyp), (time, nbdyp) variables</span>
+<span class="w">  </span><span class="c1"># variables: {zos: zos_datum_corrected}   # output name -&gt; name in the file (default: same)</span>
+<span class="w">  </span><span class="c1"># subtract_mean: true    # add only the file&#39;s variability (each point&#39;s time mean removed)</span>
+<span class="w">  </span><span class="c1"># filename_template: &quot;bdy_2d_tpxo_{start}_{end}.nc&quot;   # default for none/file</span>
+</code></pre></div>
+
+<p>The file's points are checked against the boundary point list (count and,
+when it has <code>boundary_lon</code>/<code>boundary_lat</code>, positions). It may have any time
+step; outside its period its first/last values are held (with a warning).
+A variable missing from the file gets the tide alone. From the command line:
+<code>--tpxo-only</code> or <code>--background-file FILE</code>.</p>
+<hr />
+<h2 id="tpxo9-reader">TPXO9 reader</h2>
+<p><code>tidal_boundary.py</code> reads TPXO9 constituent files <strong>directly with xarray and
+scipy</strong> — no pygetm conda environment is needed.  The module is usable in any
+Python environment that has numpy, xarray, and scipy.</p>
+<h3 id="file-layout">File layout</h3>
+<p>The TPXO9 atlas directory must contain:</p>
+<div class="codehilite"><pre><span></span><code>grid_tpxo9_atlas[_v5].nc          # grid file (determines postfix)
+h_{name}_tpxo9_atlas_30[_v5].nc   # elevation constituents
+u_{name}_tpxo9_atlas_30[_v5].nc   # transport constituents (u and v)
+</code></pre></div>
+
+<p>where <code>{name}</code> is one of the 12 supported constituents:
+<code>m2 s2 n2 k2 k1 o1 p1 q1 mm mf m4 ms4</code>.</p>
+<p>If the <code>_v5</code> grid file exists, all constituent files are also assumed to be
+<code>_v5</code> format.</p>
+<h3 id="harmonic-prediction">Harmonic prediction</h3>
+<p>The tidal signal at time <em>t</em> and boundary point <em>j</em> is:</p>
+<div class="codehilite"><pre><span></span><code>η(t, j) = Σ_n [ Re_n(j) · cos(ω_n · t) − Im_n(j) · sin(ω_n · t) ]
+</code></pre></div>
+
+<p>where <code>ω_n</code> are the Doodson angular speeds (degrees per hour) and <code>t</code> is
+measured in hours since the TPXO reference epoch (1858-11-17 UTC).</p>
+<p>Nodal corrections are omitted; the resulting amplitude error is ≲ 3 % over
+multi-decade spans.</p>
+<h3 id="tpxo-cache">TPXO cache</h3>
+<p>The tidal signal depends only on the boundary-point coordinates and the time
+range — it is identical for every CMIP6 model and scenario.  The first call
+saves the result as a compressed NetCDF under <code>tpxo.cache_dir</code>:</p>
+<div class="codehilite"><pre><span></span><code>tpxo_{variable}_{sha1_12chars}_{start}_{end}.nc
+</code></pre></div>
+
+<p>Subsequent calls load the cache, skipping the interpolation and prediction
+steps.  A cache miss happens only when the boundary coordinates or the time
+range changes.</p>
+<hr />
+<h2 id="cmip6-mean-component">CMIP6 mean component</h2>
+<p>For each CMIP6 model and scenario the workflow:</p>
+<ol>
+<li>Opens the monthly CMIP6 variable (e.g. <code>zos</code>, <code>uo</code>, <code>vo</code>) using
+   <code>load_cmip6_variable()</code>.</li>
+<li>Interpolates to the boundary points via <code>RegularGridInterpolator</code>
+   (nearest-neighbour fallback for masked grids).</li>
+<li>For 3-D variables (<code>uo</code>, <code>vo</code>): depth-integrates over the water column using
+   centred finite differences for layer thicknesses; NaN cells (below seafloor)
+   contribute zero.</li>
+<li>Linearly interpolates monthly values onto the hourly time axis.</li>
+</ol>
+<hr />
+<h2 id="config-reference">Config reference</h2>
+<div class="codehilite"><pre><span></span><code><span class="nt">source_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tidal_ssh</span>
+
+<span class="c1"># ── TPXO9 ────────────────────────────────────────────────────────────────────</span>
+<span class="nt">tpxo</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">root</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/TPXO9</span><span class="w">          </span><span class="c1"># constituent file directory</span>
+<span class="w">  </span><span class="nt">cache_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/TPXO9/cache</span><span class="w">  </span><span class="c1"># optional; skip to disable caching</span>
+
+<span class="c1"># ── CMIP6 ────────────────────────────────────────────────────────────────────</span>
+<span class="nt">cmip6</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MPI-ESM1-2-HR</span><span class="w">   </span><span class="c1"># CMIP6 model identifier</span>
+<span class="w">  </span><span class="nt">experiment_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssp370</span><span class="w">       </span><span class="c1"># scenario</span>
+<span class="w">  </span><span class="nt">access</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span><span class="w">               </span><span class="c1"># &#39;local&#39; | &#39;esgf&#39; | &#39;pangeo&#39;</span>
+<span class="w">  </span><span class="nt">local_root</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/CMIP6</span><span class="w">    </span><span class="c1"># only required when access: local</span>
+<span class="w">  </span><span class="nt">table_id</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">Oday</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">Omon</span><span class="p p-Indicator">]</span><span class="w">      </span><span class="c1"># try daily first, fall back to monthly</span>
+<span class="w">  </span><span class="nt">download_if_missing</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">   </span><span class="c1"># download from ESGF when local files absent</span>
+<span class="w">  </span><span class="nt">esgf_cache_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/cache/cmip6</span><span class="w">  </span><span class="c1"># where to cache downloaded files (default: local_root)</span>
+<span class="w">  </span><span class="nt">variant_label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">r1i1p1f1</span>
+<span class="w">  </span><span class="nt">grid_label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gn</span>
+
+<span class="c1"># ── Boundary points ──────────────────────────────────────────────────────────</span>
+<span class="nt">boundary_points</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./bdy_coords/nse_bdy_lonlat.txt</span>
+<span class="w">  </span><span class="nt">min_gap_degrees</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span><span class="w">        </span><span class="c1"># auto-detect segment boundaries</span>
+
+<span class="c1"># ── Time ─────────────────────────────────────────────────────────────────────</span>
+<span class="nt">time_range</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start_date</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2015-01-01&quot;</span>
+<span class="w">  </span><span class="nt">end_date</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2100-12-31&quot;</span>
+<span class="w">  </span><span class="nt">calendar</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standard</span><span class="w">          </span><span class="c1"># standard | no_leap | all_leap | 360_day</span>
+
+<span class="c1"># ── Output ───────────────────────────────────────────────────────────────────</span>
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">base_directory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse/tidal</span>
+<span class="w">  </span><span class="c1"># default path: CMIP6/{source_id}/{experiment_id}/bdy_2d_{start}_{end}.nc</span>
+<span class="w">  </span><span class="c1"># filename_template: &quot;CMIP6/{source_id}/{experiment_id}/bdy_2d_{start}_{end}.nc&quot;</span>
+</code></pre></div>
+
+<hr />
+<h2 id="cli-reference">CLI reference</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Full run</span>
+run-tidal-boundaries<span class="w">  </span>--config<span class="w"> </span>config/nse_tidal_bdy.yaml
+
+<span class="c1"># Dry run (print plan without writing files)</span>
+run-tidal-boundaries<span class="w">  </span>--config<span class="w"> </span>config/nse_tidal_bdy.yaml<span class="w"> </span>--dryrun
+
+<span class="c1"># Override time range (useful for testing a single year)</span>
+run-tidal-boundaries<span class="w">  </span>--config<span class="w"> </span>config/nse_tidal_bdy.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--start<span class="w"> </span><span class="m">2060</span>-01-01<span class="w"> </span>--end<span class="w"> </span><span class="m">2060</span>-12-31
+
+<span class="c1"># Override model, scenario, and output directory</span>
+run-tidal-boundaries<span class="w">  </span>--config<span class="w"> </span>config/nse_tidal_bdy.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--model<span class="w"> </span>UKESM1-0-LL<span class="w"> </span>--scenario<span class="w"> </span>ssp126<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--output-dir<span class="w"> </span>./boundary_data/nse/tidal
+
+<span class="c1"># TPXO9 tide only at the boundary points (no CMIP6)</span>
+run-tidal-boundaries<span class="w">  </span>--config<span class="w"> </span>config/nse_tidal_bdy.yaml<span class="w"> </span>--tpxo-only<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--start<span class="w"> </span><span class="m">2015</span>-01-01<span class="w"> </span>--end<span class="w"> </span><span class="m">2015</span>-12-31
+
+<span class="c1"># TPXO9 tide plus the zos/uo/vo of a boundary file on the same points</span>
+run-tidal-boundaries<span class="w">  </span>--config<span class="w"> </span>config/nse_tidal_bdy.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--background-file<span class="w"> </span>/data/.../my_boundary.nc
+</code></pre></div>
+
+<hr />
+<h2 id="output">Output</h2>
+<p>One NetCDF file per run, dimensions <code>(time, nbdyp)</code>:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Units</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>zos</code></td>
+<td>m</td>
+<td>SSH = TPXO tidal elevation + CMIP6 monthly mean sea level</td>
+</tr>
+<tr>
+<td><code>uo</code></td>
+<td>m²/s</td>
+<td>U barotropic transport = TPXO tidal + CMIP6 depth-integrated uo</td>
+</tr>
+<tr>
+<td><code>vo</code></td>
+<td>m²/s</td>
+<td>V barotropic transport = TPXO tidal + CMIP6 depth-integrated vo</td>
+</tr>
+<tr>
+<td><code>boundary_lon</code></td>
+<td>°</td>
+<td>Boundary point longitudes</td>
+</tr>
+<tr>
+<td><code>boundary_lat</code></td>
+<td>°</td>
+<td>Boundary point latitudes</td>
+</tr>
+<tr>
+<td><code>segment_id</code></td>
+<td>—</td>
+<td>Integer segment identifier per boundary point</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="notes">Notes</h2>
+<ul>
+<li><strong>All variables are on the T-grid</strong> (same boundary points for elevation and
+  velocities).  GETM handles the u/v staggering internally.</li>
+<li><strong>No pygetm needed</strong> at runtime — the TPXO reader uses only xarray + scipy.</li>
+<li><strong>Multiple scenarios</strong>: run <code>run-tidal-boundaries</code> once per scenario; the
+  TPXO computation is cached after the first run, so subsequent scenarios only
+  recompute the CMIP6 component.</li>
+</ul></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

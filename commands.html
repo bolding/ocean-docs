@@ -1,0 +1,546 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Commands · ocean-* documentation</title>
+<meta name="description" content="All 78 commands across the ocean-\* family, grouped by package and category. Every command accepts `--help` for full flag descriptions and usage examples. Links in the Guide column point at the `claude` branch of the owning repo — &quot;—&quot; means no dedicated guide exists yet, just `--help`.">
+<link rel="icon" href="./assets/logo_stacked.png">
+<link rel="stylesheet" href="./assets/style.css"><link rel="stylesheet" href="./assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="./index.html"><img src="./assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="index.html">Overview</a><a href="install.html">Installation</a><a href="data/index.html">ocean-data</a><a href="prep/index.html">ocean-prep</a><a href="post/index.html">ocean-post</a><a href="plot/index.html">ocean-plot</a><a href="common/index.html">ocean-common</a><a href="commands.html" aria-current="page">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><h1>Commands</h1><p>All 78 commands across the ocean-\* family, grouped by package and category. Every command accepts `--help` for full flag descriptions and usage examples. Links in the Guide column point at the `claude` branch of the owning repo — &quot;—&quot; means no dedicated guide exists yet, just `--help`.</p></div></section>
+<main><div class="layout single"><article class="doc"><h1 id="cli-reference">CLI reference</h1>
+<p>All 78 commands across the ocean-* family, grouped by package and category.
+Every command accepts <code>--help</code> for full flag descriptions and usage examples.
+Links in the Guide column point at the <code>claude</code> branch of the owning repo —
+"—" means no dedicated guide exists yet, just <code>--help</code>.</p>
+<hr />
+<h2 id="ocean-data-11-commands">ocean-data (11 commands)</h2>
+<p>Data download and inspection.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data-loader</code></td>
+<td>Load and inspect ocean data — local NetCDF/Zarr, CMEMS, CMIP6, cloud archives</td>
+<td>data-loader</td>
+</tr>
+<tr>
+<td><code>argo-download</code></td>
+<td>Download Argo float profiles from the GDAC ERDDAP</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>argo-describe</code></td>
+<td>Overview and statistics of a downloaded Argo dataset</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>ices-download</code></td>
+<td>Download ICES/EMODnet oceanographic profiles</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>ices-describe</code></td>
+<td>Overview of a downloaded ICES/EMODnet dataset</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>emodnet-download</code></td>
+<td>Download physical oceanographic data from EMODnet Physics</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>emodnet-describe</code></td>
+<td>Overview of a downloaded EMODnet Physics dataset</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>emodnet-chemistry-download</code></td>
+<td>Download EMODnet Chemistry contaminant data</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>wod-download</code></td>
+<td>Download profiles from the World Ocean Database</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>time-fix-helper</code></td>
+<td>Diagnose and repair broken time axes in NetCDF files</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>update-name-mappings</code></td>
+<td>Update <code>config/name_mappings.yaml</code> from online canonical sources</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="ocean-plot-4-commands">ocean-plot (4 commands)</h2>
+<p>Static maps and animations driven by YAML configs.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ocean-plot</code></td>
+<td>Render a static Cartopy map from a NetCDF file using a YAML config</td>
+<td>plot_guide</td>
+</tr>
+<tr>
+<td><code>ocean-animations</code></td>
+<td>Create time-lapse animations (horizontal map, transect, or two-panel comparison)</td>
+<td>animations_guide</td>
+</tr>
+<tr>
+<td><code>init-plot</code></td>
+<td>Interactive wizard: generate an <code>ocean-plot</code> YAML config</td>
+<td>plot_guide</td>
+</tr>
+<tr>
+<td><code>init-animation</code></td>
+<td>Interactive wizard: generate an <code>ocean-animations</code> YAML config</td>
+<td>animations_guide</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="ocean-prep-28-commands">ocean-prep (28 commands)</h2>
+<p>Model input preparation: bathymetry, boundary conditions, initial conditions, rivers, and bias correction.</p>
+<h3 id="bathymetry">Bathymetry</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bathymetry-regrid</code></td>
+<td>Conservative interpolation of a bathymetry source (GEBCO, EMODnet) onto a model grid</td>
+<td>bathymetry</td>
+</tr>
+<tr>
+<td><code>bathymetry-create-grid</code></td>
+<td>Generate a curvilinear supergrid from a YAML spec</td>
+<td>bathymetry</td>
+</tr>
+<tr>
+<td><code>bathymetry-splice</code></td>
+<td>Splice a regional bathymetry patch into a copy of a larger file</td>
+<td>bathymetry</td>
+</tr>
+<tr>
+<td><code>bathymetry-view</code></td>
+<td>Quick-look, full-resolution bathymetry viewer for any region, straight from a raw source (GEBCO/EMODnet) — no grid/regridding config needed</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>estuary-morphology</code></td>
+<td>Cross-sectional area and volume along an estuary thalweg</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>init-bathymetry</code></td>
+<td>Interactive wizard: generate a bathymetry config</td>
+<td>bathymetry</td>
+</tr>
+</tbody>
+</table>
+<h3 id="boundary-conditions">Boundary conditions</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run-cmems-boundaries</code></td>
+<td>Download CMEMS boundary conditions (T/S/U/V/SSH)</td>
+<td>boundaries-cmems</td>
+</tr>
+<tr>
+<td><code>run-cmip6-boundaries</code></td>
+<td>Download and regrid CMIP6 boundary conditions</td>
+<td>boundaries-cmip6</td>
+</tr>
+<tr>
+<td><code>run-tidal-boundaries</code></td>
+<td>Generate hourly SSH + barotropic transport boundary files combining TPXO9 tidal prediction with CMIP6 daily/monthly mean sea level/currents</td>
+<td>tidal-boundaries</td>
+</tr>
+<tr>
+<td><code>run-delta-boundaries</code></td>
+<td>Project AMM7/AMM15 boundary conditions into the future via the CMIP6 monthly mean change signal (delta-change method)</td>
+<td>delta-change-boundaries</td>
+</tr>
+<tr>
+<td><code>run-direct-bc-boundaries</code></td>
+<td>Bias-correct CMIP6's own simulated boundary values directly against a real reference</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>run-local-boundaries</code></td>
+<td>Extract boundary conditions from a local NetCDF/Zarr file</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>check-cmems-coverage</code></td>
+<td>Check whether CMEMS datasets cover the requested boundary points</td>
+<td>boundaries-cmems</td>
+</tr>
+<tr>
+<td><code>check-cmip6-coverage</code></td>
+<td>Check CMIP6 availability for the variables and models in a config</td>
+<td>boundaries-cmip6</td>
+</tr>
+<tr>
+<td><code>boundary-diagnostics</code></td>
+<td>QC plots and Markdown report for boundary condition output</td>
+<td>boundary-diagnostics</td>
+</tr>
+<tr>
+<td><code>final-boundary-check</code></td>
+<td>Pre-production sanity checks for the NSe bio boundary pipeline (no3/po4/si/o2/dissic/talk) across models, scenarios, and generation methods</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>derive-baltic-talk</code></td>
+<td>Fill the Baltic segment's all-NaN <code>talk</code> gap in <code>bio_carbon_new</code> via real seawater carbonate-system chemistry</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>init-boundaries</code></td>
+<td>Interactive wizard: generate a boundary condition config</td>
+<td>model-setup</td>
+</tr>
+</tbody>
+</table>
+<h3 id="initial-conditions">Initial conditions</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>download-init-conditions</code></td>
+<td>Download T/S initial conditions from CMEMS AMM7/AMM15</td>
+<td>initial-conditions</td>
+</tr>
+<tr>
+<td><code>run-local-init-conditions</code></td>
+<td>Extract initial conditions from a local NetCDF/Zarr file</td>
+<td>initial-conditions</td>
+</tr>
+<tr>
+<td><code>init-initial-conditions</code></td>
+<td>Interactive wizard: generate an initial conditions config</td>
+<td>initial-conditions</td>
+</tr>
+<tr>
+<td><code>ic-diagnostics</code></td>
+<td>QC plots and Markdown report for initial condition output</td>
+<td>initial-conditions</td>
+</tr>
+</tbody>
+</table>
+<h3 id="rivers">Rivers</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>river-projection</code></td>
+<td>Project future river flows and nutrient loads (delta-change)</td>
+<td>river-projection</td>
+</tr>
+<tr>
+<td><code>river-final-check</code></td>
+<td>Pre-production sanity checks for river discharge and nutrients (EMORID record, climatology, CMIP6 delta-change projection) across models and scenarios</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="bias-correction">Bias correction</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>bc</code></td>
+<td>Unified entry point: <code>bc correct</code>, <code>bc diagnostics</code>, <code>bc check</code></td>
+<td>bias_correction_guide</td>
+</tr>
+<tr>
+<td><code>bc-correct</code></td>
+<td>Bias-correct CMIP6 atmospheric forcing files (QDM / QM / delta methods)</td>
+<td>bias_correction_guide</td>
+</tr>
+<tr>
+<td><code>bc-diagnostics</code></td>
+<td>Diagnostics and QC plots for bias-corrected forcings</td>
+<td>bias_correction_guide</td>
+</tr>
+<tr>
+<td><code>meteo-final-check</code></td>
+<td>Pre-production sanity checks for the bias-corrected CMIP6 meteo forcing archive across models and scenarios</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="ocean-post-35-commands">ocean-post (35 commands)</h2>
+<p>Validation, scenario analysis, and reporting.</p>
+<h3 id="validation">Validation</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gridded-2d-validation</code></td>
+<td>Validate surface/bottom/depth-layer fields vs satellite and WOA</td>
+<td>gridded-2d-validation</td>
+</tr>
+<tr>
+<td><code>gridded-3d-validation</code></td>
+<td>Validate the full water column vs gridded climatologies</td>
+<td>gridded-3d-validation</td>
+</tr>
+<tr>
+<td><code>cruise-ctd-profiles</code></td>
+<td>Validate ship CTD profiles vs model</td>
+<td>profile-validation</td>
+</tr>
+<tr>
+<td><code>argo-profiles</code></td>
+<td>Validate Argo float profiles vs model</td>
+<td>profile-validation</td>
+</tr>
+<tr>
+<td><code>glodap-profiles</code></td>
+<td>Validate GLODAP bottle data vs model</td>
+<td>profile-validation</td>
+</tr>
+<tr>
+<td><code>wod-profiles</code></td>
+<td>Validate World Ocean Database profiles vs model</td>
+<td>profile-validation</td>
+</tr>
+<tr>
+<td><code>ices-profiles</code></td>
+<td>Validate ICES/ECOVAL profiles vs model</td>
+<td>profile-validation</td>
+</tr>
+<tr>
+<td><code>fixed-platform</code></td>
+<td>Validate mooring and buoy time series vs model</td>
+<td>profile-validation</td>
+</tr>
+<tr>
+<td><code>station-timeseries</code></td>
+<td>Long-term monitoring station time series vs model</td>
+<td>run-validation</td>
+</tr>
+<tr>
+<td><code>tidal-analysis</code></td>
+<td>Tidal harmonic analysis vs GESLA/FES2014/TPXO9</td>
+<td>tidal-analysis</td>
+</tr>
+<tr>
+<td><code>mle-comparison</code></td>
+<td>Rank experiments by joint MLE in SVD space</td>
+<td>mle-comparison</td>
+</tr>
+</tbody>
+</table>
+<h3 id="scenarios-and-projections">Scenarios and projections</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>river-diagnostics</code></td>
+<td>Diagnostic plots for river flow projections</td>
+<td>river-projection</td>
+</tr>
+<tr>
+<td><code>single-scenario</code></td>
+<td>Single-model climate scenario analysis</td>
+<td>scenarios</td>
+</tr>
+<tr>
+<td><code>multi-scenario</code></td>
+<td>Multi-model climate scenario comparison</td>
+<td>scenarios</td>
+</tr>
+<tr>
+<td><code>plot-domain-overview</code></td>
+<td>Render a domain-overview PNG from a driver <code>--export-domain-summary</code> file</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="reporting-and-plotting">Reporting and plotting</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ocean-reporting</code></td>
+<td>Generate a Hugo website or PDF from all validation results</td>
+<td>reporting</td>
+</tr>
+<tr>
+<td><code>plot-2d-summary</code></td>
+<td>Summary maps across experiments (2D validation)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>plot-3d-summary</code></td>
+<td>Summary maps across experiments (3D validation)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>plot-regions</code></td>
+<td>Map all named regions defined in a regions YAML file</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>station-map</code></td>
+<td>Map all monitoring stations defined in the station catalogue</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>download-station</code></td>
+<td>Download and report on long-term monitoring station data</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="orchestration-and-maintenance">Orchestration and maintenance</h3>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+<th>Guide</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run-analyses</code></td>
+<td>Master orchestrator for all analysis steps</td>
+<td>run-validation</td>
+</tr>
+<tr>
+<td><code>manage-analyses</code></td>
+<td>Housekeeping for the analyses/ tree: wipe, purge, sync, migrate</td>
+<td>manage-analyses</td>
+</tr>
+<tr>
+<td><code>audit-layout</code></td>
+<td>List or delete files that violate the layout convention</td>
+<td>manage-analyses</td>
+</tr>
+<tr>
+<td><code>simulation-list</code></td>
+<td>Manage the simulation registry (staging YAML → SQLite)</td>
+<td>simulation-list</td>
+</tr>
+<tr>
+<td><code>stats-db</code></td>
+<td>Inspect, query, and export the statistics database</td>
+<td>statistics-db</td>
+</tr>
+<tr>
+<td><code>maintain-stats</code></td>
+<td>Maintain statistics files: sort sections, migrate format versions</td>
+<td>statistics-db</td>
+</tr>
+<tr>
+<td><code>regrid</code> / <code>ocean-regrid</code></td>
+<td>Regrid a NetCDF/Zarr file to a target grid</td>
+<td>regridding</td>
+</tr>
+<tr>
+<td><code>resolve-config</code></td>
+<td>Show how a config resolves on this machine (same layered loader the real pipeline uses)</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>validate-data-inventory</code></td>
+<td>Check a Data Sources inventory's paths resolve</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>update-from-remote</code></td>
+<td>Sync remote results, run reporting, and deploy</td>
+<td>update-from-remote</td>
+</tr>
+<tr>
+<td><code>push-to-remote</code></td>
+<td>Push local analyses tree to a remote simulation server</td>
+<td>push-to-remote</td>
+</tr>
+<tr>
+<td><code>migrate-analyses</code></td>
+<td>Migrate to the current analyses/ layout version</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>migrate-physics-bio</code></td>
+<td>One-time migration to the physics/bio directory layout</td>
+<td>—</td>
+</tr>
+</tbody>
+</table></article></div></main>
+<footer class="foot"><div class="footin"><img src="./assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

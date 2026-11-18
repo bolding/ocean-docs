@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>config/bc_correct_example.yaml · ocean-* documentation</title>
+<meta name="description" content="Example file from ocean-prep">
+<link rel="icon" href="../../assets/logo_stacked.png">
+<link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../../index.html"><img src="../../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../../index.html">Overview</a><a href="../../install.html">Installation</a><a href="../../data/index.html">ocean-data</a><a href="../index.html" aria-current="page">ocean-prep</a><a href="../../post/index.html">ocean-post</a><a href="../../plot/index.html">ocean-plot</a><a href="../../common/index.html">ocean-common</a><a href="../../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="../index.html">ocean-prep</a> · example</div><h1>config/bc_correct_example.yaml</h1><p>Example file from ocean-prep</p></div></section>
+<main><div class="layout single"><article class="doc"><div class="codehilite"><pre><span></span><code><span class="c1"># Bias Correction Configuration — Example</span>
+<span class="c1">#</span>
+<span class="c1"># Corrects future atmospheric forcing files from a CMIP6 model so that</span>
+<span class="c1"># their climatology matches a gridded observational reference.</span>
+<span class="c1">#</span>
+<span class="c1"># Workflow</span>
+<span class="c1"># --------</span>
+<span class="c1">#   1. Load observational reference  (ref)  for the calibration period.</span>
+<span class="c1">#   2. Load historical model run     (hist) for the same calibration period.</span>
+<span class="c1">#   3. Load future model run         (future) for the projection period.</span>
+<span class="c1">#   4. Regrid everything to the model/output grid if grids differ.</span>
+<span class="c1">#   5. Apply bias correction per variable, per calendar month.</span>
+<span class="c1">#   6. Write one NetCDF per output year.</span>
+<span class="c1">#</span>
+<span class="c1"># Run with:</span>
+<span class="c1">#   bc-correct --config config/bc_correct_example.yaml</span>
+
+<span class="c1"># ── Metadata ─────────────────────────────────────────────────────────────────</span>
+<span class="c1"># scenario is substituted for {scenario} in future_model URIs, output.dir, and</span>
+<span class="c1"># filename patterns; also used by bc-diagnostics to place outputs under</span>
+<span class="c1">#   &lt;output.analyses_dir&gt;/scenarios/&lt;scenario&gt;/</span>
+<span class="c1"># model is substituted for {model} throughout all CMIP6 URIs and output.dir.</span>
+<span class="c1"># Override on the command line: bc correct --config ... --model MPI-ESM1-2-LR</span>
+<span class="nt">metadata</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">scenario</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssp245</span>
+<span class="w">  </span><span class="nt">model</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">MPI-ESM1-2-HR</span>
+
+<span class="c1"># ── CMIP6 settings ────────────────────────────────────────────────────────────</span>
+<span class="c1"># access: how CMIP6 data is loaded.</span>
+<span class="c1">#</span>
+<span class="c1">#   pangeo     — Pangeo GCS Zarr mirror (default).  Streams only the requested</span>
+<span class="c1">#                spatial domain and time range via xarray + Dask.  Recommended</span>
+<span class="c1">#                for atmospheric daily data: a global daily field (e.g. tas/day</span>
+<span class="c1">#                for MPI-ESM1-2-HR) is ~220 MB/file × 33 files = 7 GB just for</span>
+<span class="c1">#                historical.  Pangeo transfers only your bbox subset, which is</span>
+<span class="c1">#                far faster than bulk download.</span>
+<span class="c1">#</span>
+<span class="c1">#   esgf       — cascade: Pangeo first, ESGF OPeNDAP second.  Use when Pangeo</span>
+<span class="c1">#                is missing a variable (e.g. some radiation components).  Falls</span>
+<span class="c1">#                back automatically.</span>
+<span class="c1">#</span>
+<span class="c1">#   esgf_direct — ESGF OPeNDAP only (no Pangeo attempt).  Streams the subset</span>
+<span class="c1">#                you request; slower per-variable but no local storage needed.</span>
+<span class="c1">#</span>
+<span class="c1">#   NOTE: http (bulk download) is NOT recommended for atmospheric daily data —</span>
+<span class="c1">#   a single scenario × variable can be 4–7 GB; 10 variables × 2 scenarios</span>
+<span class="c1">#   easily exceeds 100 GB.  Use Pangeo or OPeNDAP streaming instead.</span>
+<span class="c1">#</span>
+<span class="c1"># member_defaults: per-model ensemble member IDs.  The entries below mirror the</span>
+<span class="c1"># built-in defaults that are always applied automatically (all verified via ESGF).</span>
+<span class="c1"># Add further models here or on the command line with</span>
+<span class="c1"># --member-defaults MODEL:MEMBER_ID to extend or override.</span>
+<span class="c1">#</span>
+<span class="c1"># Both URI forms are handled — {member_id} placeholder and hardcoded segment:</span>
+<span class="c1">#   uri: &quot;cmip6://CNRM-ESM2-1/historical/tas/day/{member_id}&quot;   # → r1i1p1f2</span>
+<span class="c1">#   uri: &quot;cmip6://CNRM-ESM2-1/historical/tas/day/r1i1p1f1&quot;     # → overridden to r1i1p1f2</span>
+<span class="c1">#</span>
+<span class="c1"># r1i1p1f1 (standard) — no entry needed:</span>
+<span class="c1">#   MPI-ESM1-2-HR, MPI-ESM1-2-LR, GFDL-ESM4, GFDL-CM4,</span>
+<span class="c1">#   IPSL-CM6A-LR, EC-Earth3, EC-Earth3-Veg,</span>
+<span class="c1">#   NorESM2-MM, NorESM2-LM, ACCESS-CM2, ACCESS-ESM1-5,</span>
+<span class="c1">#   CESM2, CESM2-WACCM, BCC-CSM2-MR, MIROC6, INM-CM5-0, MRI-ESM2-0</span>
+<span class="nt">cmip6</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">access</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pangeo</span><span class="w">    </span><span class="c1"># pangeo (default) | esgf (Pangeo→OPeNDAP) | esgf_direct (OPeNDAP only)</span>
+<span class="w">  </span><span class="nt">member_defaults</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">CNRM-ESM2-1</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">r1i1p1f2</span>
+<span class="w">    </span><span class="nt">CNRM-CM6-1</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">r1i1p1f2</span>
+<span class="w">    </span><span class="nt">CNRM-CM6-1-HR</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">r1i1p1f2</span>
+<span class="w">    </span><span class="nt">UKESM1-0-LL</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">r1i1p1f2</span>
+<span class="w">    </span><span class="nt">HadGEM3-GC31-LL</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">r1i1p1f3</span>
+<span class="w">    </span><span class="nt">HadGEM3-GC31-MM</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">r1i1p1f3</span>
+<span class="w">  </span><span class="c1"># skip_variables: variables to exclude per model and scenario (e.g. when</span>
+<span class="w">  </span><span class="c1"># the required CMIP6 data is unavailable on ESGF).</span>
+<span class="w">  </span><span class="c1"># MPI-ESM1-2-HR does not publish rlds/rlus at daily frequency for ssp126.</span>
+<span class="w">  </span><span class="nt">skip_variables</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">MPI-ESM1-2-HR</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">ssp126</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">net_lw</span><span class="p p-Indicator">]</span>
+
+<span class="c1"># ── Calibration period ───────────────────────────────────────────────────────</span>
+<span class="c1"># The reference and historical datasets must cover this period.</span>
+<span class="c1"># `end` must NOT be later than &quot;2014-12-31&quot;: CMIP6&#39;s `historical`</span>
+<span class="c1"># experiment is a fixed, protocol-bounded 1850-2014 for every model, no</span>
+<span class="c1"># exceptions. A later end date doesn&#39;t error -- it silently truncates</span>
+<span class="c1"># the CMIP6 (hist) side of the QDM fit while the reference (ref) side</span>
+<span class="c1"># still uses the full window, an asymmetric calibration baseline that</span>
+<span class="c1"># bakes in a spurious &quot;model bias&quot; from whatever real trend exists in</span>
+<span class="c1"># the extra ref-only years. Real incident: this file previously showed</span>
+<span class="c1"># &quot;2019-12-31&quot; here, undetected in production for months.</span>
+<span class="nt">calibration</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1990-01-01&quot;</span>
+<span class="w">  </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2014-12-31&quot;</span>
+
+<span class="c1"># ── Future period ─────────────────────────────────────────────────────────────</span>
+<span class="c1"># The corrected output will cover this period.</span>
+<span class="nt">future</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2020-01-01&quot;</span>
+<span class="w">  </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2099-12-31&quot;</span>
+
+<span class="c1"># ── Historical output period (optional) ──────────────────────────────────────</span>
+<span class="c1"># Used by:  bc correct --historical  (or --historical-start/--historical-end)</span>
+<span class="c1"># Defines the period of bias-corrected CMIP6 historical output.</span>
+<span class="c1"># Falls back to calibration period if not set.</span>
+<span class="c1"># Typical use: produce consistent forcing for the full historical run (e.g.</span>
+<span class="c1"># 1950–2014) even though calibration only uses a subset (e.g. 1990–2019).</span>
+<span class="nt">historical_period</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1950-01-01&quot;</span>
+<span class="w">  </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2014-12-31&quot;</span>
+
+<span class="c1"># ── Spatial domain ────────────────────────────────────────────────────────────</span>
+<span class="c1"># All datasets are subset to this domain before correction.</span>
+<span class="nt">domain</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-20.0</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">30.0</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">45.0</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">75.0</span>
+
+<span class="c1"># ── Variables ─────────────────────────────────────────────────────────────────</span>
+<span class="c1"># List the variables to correct.  For each variable you must provide:</span>
+<span class="c1">#   name       — variable name in the model files</span>
+<span class="c1">#   kind       — &#39;+&#39; (additive, e.g. temperature) or &#39;*&#39; (multiplicative, e.g. precip)</span>
+<span class="c1">#              — omit to use the built-in default for the variable name</span>
+<span class="c1">#</span>
+<span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tas</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;+&quot;</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bilinear</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">pr</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;*&quot;</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conservative</span><span class="w">   </span><span class="c1"># preserves area-integrated totals for precipitation</span>
+<span class="w">  </span><span class="c1"># Net shortwave = rsds − rsus (ERA5 reference: ssr).</span>
+<span class="w">  </span><span class="c1"># Correcting the net rather than the downwelling component accounts for</span>
+<span class="w">  </span><span class="c1"># differences in surface albedo parameterisations between ERA5 and CMIP6.</span>
+<span class="w">  </span><span class="c1"># See guides/radiation-bc.md for background and availability notes.</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">net_sw</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;*&quot;</span><span class="w">             </span><span class="c1"># multiplicative — net SW is always ≥ 0</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conservative</span>
+
+<span class="w">  </span><span class="c1"># Net longwave = rlds − rlus (ERA5 reference: str).</span>
+<span class="w">  </span><span class="c1"># str is negative (ocean loses LW heat); additive kind handles signed values.</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">net_lw</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;+&quot;</span><span class="w">             </span><span class="c1"># additive — net LW is always ≤ 0</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conservative</span>
+
+<span class="w">  </span><span class="c1"># ── Alternative: downwelling-only correction (legacy / CMIP7 downwelling-only) ──</span>
+<span class="w">  </span><span class="c1"># If rsus/rlus are unavailable, fall back to correcting the downwelling</span>
+<span class="w">  </span><span class="c1"># component directly.  Replace net_sw/net_lw above with the two entries below.</span>
+<span class="w">  </span><span class="c1"># - name: rsds</span>
+<span class="w">  </span><span class="c1">#   kind: &quot;*&quot;</span>
+<span class="w">  </span><span class="c1">#   regridding:</span>
+<span class="w">  </span><span class="c1">#     method: conservative</span>
+<span class="w">  </span><span class="c1"># - name: rlds</span>
+<span class="w">  </span><span class="c1">#   kind: &quot;*&quot;</span>
+<span class="w">  </span><span class="c1">#   regridding:</span>
+<span class="w">  </span><span class="c1">#     method: conservative</span>
+<span class="w">  </span><span class="c1">#</span>
+<span class="w">  </span><span class="c1"># ── CMIP7 note: direct net radiation ─────────────────────────────────────────</span>
+<span class="w">  </span><span class="c1"># CMIP7 may publish net surface radiation directly (e.g. rsns / rlns).</span>
+<span class="w">  </span><span class="c1"># If so, replace the composite blocks below in reference/historical/future_model</span>
+<span class="w">  </span><span class="c1"># with simple single-source configs pointing to those variables, keeping the</span>
+<span class="w">  </span><span class="c1"># ERA5 ssr/str reference entries unchanged.</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uas</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;+&quot;</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bilinear</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">vas</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;+&quot;</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bilinear</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ps</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;+&quot;</span><span class="w">    </span><span class="c1"># additive — both ERA5 sp and CMIP6 ps are in Pa</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bilinear</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">psl</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;+&quot;</span><span class="w">    </span><span class="c1"># additive — both ERA5 mslp and CMIP6 psl are in Pa</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bilinear</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">huss</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;*&quot;</span><span class="w">    </span><span class="c1"># multiplicative — non-negative ratio</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bilinear</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">evspsbl</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;*&quot;</span><span class="w">    </span><span class="c1"># multiplicative — non-negative flux after sign correction</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bilinear</span><span class="w">  </span><span class="c1"># spatially smooth; bilinear correct for per-area flux</span>
+
+<span class="c1"># ── Correction method ─────────────────────────────────────────────────────────</span>
+<span class="nt">correction</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">qdm</span><span class="w">          </span><span class="c1"># &#39;delta&#39; | &#39;qm&#39; | &#39;qdm&#39; (recommended for projections)</span>
+<span class="w">                       </span><span class="c1"># &#39;qdm_v1&#39;: the kernel called qdm before 2026-11</span>
+<span class="w">                       </span><span class="c1"># (effectively qm); only to reproduce old products</span>
+<span class="w">  </span><span class="nt">n_quantiles</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span><span class="w">     </span><span class="c1"># number of quantile bins for &#39;qm&#39; and &#39;qdm&#39;</span>
+<span class="w">  </span><span class="nt">window_years</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span><span class="w">     </span><span class="c1"># qdm: future values are ranked within this moving window</span>
+<span class="w">  </span><span class="nt">step_years</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">       </span><span class="c1"># qdm: the window moves in steps of this many years</span>
+
+<span class="c1"># ── Regridding ────────────────────────────────────────────────────────────────</span>
+<span class="c1"># Spatial interpolation method used when regridding model → reference grid.</span>
+<span class="c1"># Must be set per variable via the &#39;regridding:&#39; block inside each variable entry.</span>
+<span class="c1"># Options: bilinear | conservative | nearest_s2d | nearest_d2s | patch</span>
+<span class="c1">#   bilinear    — fast, smooth; good for most continuous fields</span>
+<span class="c1">#   conservative — preserves area-integrated totals; best for fluxes and precip</span>
+<span class="c1">#   nearest_s2d — nearest-neighbour; useful for categorical or masked fields</span>
+
+<span class="c1"># ── Observational reference ───────────────────────────────────────────────────</span>
+<span class="c1"># Any source supported by DataLoader:</span>
+<span class="c1">#   - local NetCDF path (supports {year} placeholder)</span>
+<span class="c1">#   - copernicus:// URI  (requires: copernicusmarine login)</span>
+<span class="c1">#   - cmip6:// URI       (via ESGF; requires: pip install requests; optional: pip install pydap)</span>
+<span class="c1">#</span>
+<span class="nt">reference</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;${ERA5_FOLDER}/era5_t2m_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">t2m</span><span class="w">        </span><span class="c1"># name inside the file (if different from &#39;tas&#39;)</span>
+<span class="w">    </span><span class="c1"># ERA5 t2m and CMIP6 tas are both in Kelvin — no conversion needed.</span>
+<span class="w">    </span><span class="c1"># Add offset: -273.15 only if one source is in °C and the other in K.</span>
+<span class="w">    </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span><span class="w">      </span><span class="c1"># the model is daily: correct daily means against</span>
+<span class="w">                         </span><span class="c1"># daily means. An hourly reference gives the daily</span>
+<span class="w">                         </span><span class="c1"># values the spread of single hours (tas: +6 % in</span>
+<span class="w">                         </span><span class="c1"># winter to +14 % in summer, tails 1-2 K, single</span>
+<span class="w">                         </span><span class="c1"># cells up to 7 K; NSe domain, ERA5 1990-2014), and</span>
+<span class="w">                         </span><span class="c1"># disaggregation then adds the diurnal cycle again.</span>
+<span class="w">                         </span><span class="c1"># Also cuts memory from ~70 GB to a few GB.</span>
+
+<span class="w">  </span><span class="nt">pr</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;${ERA5_FOLDER}/era5_tp_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tp</span>
+<span class="w">    </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily_sum</span><span class="w">  </span><span class="c1"># hourly accumulations summed to daily totals</span>
+<span class="w">    </span><span class="c1"># ERA5 tp is stored as an accumulation in metres (m per time step).</span>
+<span class="w">    </span><span class="c1"># CMIP6 pr is in kg m-2 s-1 (= mm/s).</span>
+<span class="w">    </span><span class="c1"># DO NOT set scale_factor here — _align_units() auto-detects the ERA5</span>
+<span class="w">    </span><span class="c1"># m/step unit via the &#39;units&#39; attribute and converts automatically using</span>
+<span class="w">    </span><span class="c1"># the actual time-step length (1 day after daily_sum).  Adding a manual</span>
+<span class="w">    </span><span class="c1"># scale_factor would cause a double conversion.</span>
+
+<span class="w">  </span><span class="c1"># ERA5 provides net radiation directly — no composite needed for the reference.</span>
+<span class="w">  </span><span class="c1"># ERA5 ssr = surface net solar radiation (ssrd − reflected SW); always ≥ 0.</span>
+<span class="w">  </span><span class="c1"># ERA5 str = surface net thermal radiation (strd − surface upwelling LW); always ≤ 0.</span>
+<span class="w">  </span><span class="c1"># Both are accumulated J/m²; scale_factor converts to W/m² for hourly files.</span>
+<span class="w">  </span><span class="c1"># For daily ERA5 files use scale_factor: 0.000011574 (÷ 86400 s/day) instead.</span>
+<span class="w">  </span><span class="nt">net_sw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_ssr_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssr</span>
+<span class="w">    </span><span class="nt">scale_factor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.000277778</span><span class="w">   </span><span class="c1"># J/m² (hourly accumulation) → W/m²</span>
+<span class="w">    </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span><span class="w">              </span><span class="c1"># REQUIRED: night-time zeros make hourly distribution</span>
+<span class="w">                                 </span><span class="c1"># incompatible with daily CMIP6 net_sw</span>
+
+<span class="w">  </span><span class="nt">net_lw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_str_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">str</span>
+<span class="w">    </span><span class="nt">scale_factor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.000277778</span><span class="w">   </span><span class="c1"># same as net_sw</span>
+<span class="w">    </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span>
+
+<span class="w">  </span><span class="nt">uas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;${ERA5_FOLDER}/era5_u10_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">u10</span>
+<span class="w">    </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span><span class="w">      </span><span class="c1"># as tas (hourly reference: spread +9-11 %)</span>
+
+<span class="w">  </span><span class="nt">vas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;${ERA5_FOLDER}/era5_v10_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v10</span>
+<span class="w">    </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span>
+
+<span class="w">  </span><span class="nt">ps</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;${ERA5_FOLDER}/era5_sp_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sp</span>
+<span class="w">    </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span>
+<span class="w">    </span><span class="c1"># ERA5 sp and CMIP6 ps are both in Pa — no unit conversion needed.</span>
+
+<span class="w">  </span><span class="nt">psl</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;${ERA5_FOLDER}/era5_mslp_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mslp</span>
+<span class="w">    </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span><span class="w">      </span><span class="c1"># (hourly reference: spread +3 %)</span>
+<span class="w">    </span><span class="c1"># ERA5 mslp and CMIP6 psl are both in Pa — no unit conversion needed.</span>
+
+<span class="w">  </span><span class="nt">huss</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">        </span><span class="s">&quot;${ERA5_FOLDER}/era5_d2m_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">d2m</span><span class="w">          </span><span class="c1"># ERA5 dew-point temperature (K) — triggers d2m→q conversion</span>
+<span class="w">    </span><span class="nt">sp_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sp</span>
+<span class="w">    </span><span class="nt">sp_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_sp_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">resample</span><span class="p">:</span><span class="w">    </span><span class="l l-Scalar l-Scalar-Plain">daily</span><span class="w">        </span><span class="c1"># applied to q after the hourly conversion</span>
+
+<span class="w">  </span><span class="nt">evspsbl</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">         </span><span class="s">&quot;${ERA5_FOLDER}/era5_e_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">e</span>
+<span class="w">    </span><span class="nt">scale_factor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-0.011574074074074073</span><span class="w">   </span><span class="c1"># = -1000/86400: flips the sign (ERA5 e is</span>
+<span class="w">                              </span><span class="c1"># negative for evaporation) and turns each hourly</span>
+<span class="w">                              </span><span class="c1"># accumulated depth (m) into its share of a daily-mean</span>
+<span class="w">                              </span><span class="c1"># kg m-2 s-1 rate</span>
+<span class="w">    </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily_sum</span><span class="w">       </span><span class="c1"># SUM the hourly accumulations; &#39;daily&#39; (mean) divides</span>
+<span class="w">                              </span><span class="c1"># the daily total by 24 (the 3.6x evspsbl bug, 2026-10)</span>
+
+<span class="c1"># ── Historical model (same CMIP6 model, historical experiment) ───────────────</span>
+<span class="c1"># Option A — raw CMIP6 output via ESGF (OPeNDAP streaming; requires: pip install requests):</span>
+<span class="nt">historical</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/historical/tas/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">pr</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/historical/pr/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="c1"># Both rsds/rsus and rlds/rlus are available daily for MPI-ESM1-2-HR historical.</span>
+<span class="w">  </span><span class="c1"># ESGF query confirms 21 datasets for each.  See guides/radiation-bc.md.</span>
+<span class="w">  </span><span class="nt">net_sw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">composite</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">minuend</span><span class="p">:</span><span class="w">       </span><span class="c1"># rsds — downwelling shortwave</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/historical/rsds/day/r1i1p1f1&quot;</span>
+<span class="w">      </span><span class="nt">subtrahend</span><span class="p">:</span><span class="w">    </span><span class="c1"># rsus — upwelling shortwave (reflected)</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/historical/rsus/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">net_lw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">composite</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">minuend</span><span class="p">:</span><span class="w">       </span><span class="c1"># rlds — downwelling longwave</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/historical/rlds/day/r1i1p1f1&quot;</span>
+<span class="w">      </span><span class="nt">subtrahend</span><span class="p">:</span><span class="w">    </span><span class="c1"># rlus — upwelling longwave (surface emission)</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/historical/rlus/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">uas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/historical/uas/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">vas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/historical/vas/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">ps</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/historical/ps/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">psl</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/historical/psl/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">huss</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/historical/huss/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="c1"># evspsbl: two options — use whichever frequency is available for your model.</span>
+<span class="w">  </span><span class="c1">#</span>
+<span class="w">  </span><span class="c1"># Option A-1: monthly evspsbl (Amon table).</span>
+<span class="w">  </span><span class="c1"># Many CMIP6 models (e.g. MPI-ESM1-2-HR) only publish evspsbl at monthly</span>
+<span class="w">  </span><span class="c1"># frequency.  QDM will correct the monthly distribution against ERA5 daily;</span>
+<span class="w">  </span><span class="c1"># sub-daily disaggregation is still driven by the hourly ERA5 diurnal cycle.</span>
+<span class="w">  </span><span class="nt">evspsbl</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/historical/evspsbl/Amon/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="c1"># Option A-2: daily latent-heat flux (hfls, day table) → convert to evspsbl.</span>
+<span class="w">  </span><span class="c1"># hfls [W m⁻²] = evspsbl [kg m⁻² s⁻¹] × Lv [J kg⁻¹].</span>
+<span class="w">  </span><span class="c1"># Divide by Lv ≈ 2.5e6 J kg⁻¹ to recover kg m⁻² s⁻¹.</span>
+<span class="w">  </span><span class="c1"># Use this when daily output is needed but evspsbl/day is absent.</span>
+<span class="w">  </span><span class="c1"># Uncomment and comment out Option A-1 above to switch.</span>
+<span class="w">  </span><span class="c1"># evspsbl:</span>
+<span class="w">  </span><span class="c1">#   source: cmip6</span>
+<span class="w">  </span><span class="c1">#   uri:          &quot;cmip6://{model}/historical/hfls/day/r1i1p1f1&quot;</span>
+<span class="w">  </span><span class="c1">#   scale_factor: 4.0e-7   # 1 / 2.5e6  (W m⁻² → kg m⁻² s⁻¹)</span>
+
+<span class="c1"># Option B — ISIMIP3b bias-adjusted input data (requires: pip install isimip-client).</span>
+<span class="c1"># Comment out Option A and uncomment below to use ISIMIP forcings directly.</span>
+<span class="c1"># historical_isimip:</span>
+<span class="c1">#   tas:</span>
+<span class="c1">#     source: isimip</span>
+<span class="c1">#     simulation_round: ISIMIP3b</span>
+<span class="c1">#     climate_forcing: MRI-ESM2-0</span>
+<span class="c1">#     climate_scenario: historical</span>
+<span class="c1">#     variable: tas</span>
+<span class="c1">#   pr:</span>
+<span class="c1">#     source: isimip</span>
+<span class="c1">#     simulation_round: ISIMIP3b</span>
+<span class="c1">#     climate_forcing: MRI-ESM2-0</span>
+<span class="c1">#     climate_scenario: historical</span>
+<span class="c1">#     variable: pr</span>
+
+<span class="c1"># ── Future model (same CMIP6/ISIMIP model, SSP scenario) ─────────────────────</span>
+<span class="c1"># {scenario} is substituted at runtime from metadata.scenario (e.g. ssp245).</span>
+<span class="c1"># For ISIMIP future, use source: isimip with climate_scenario: {scenario} etc.</span>
+<span class="nt">future_model</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">tas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/{scenario}/tas/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">pr</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/{scenario}/pr/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="c1"># rsus and rlus confirmed available for MPI-ESM1-2-HR ssp245 (5 members) and</span>
+<span class="w">  </span><span class="c1"># ssp585 (3 members) at daily frequency via ESGF.  See guides/radiation-bc.md.</span>
+<span class="w">  </span><span class="c1">#</span>
+<span class="w">  </span><span class="c1"># GFDL-ESM4 note: rsus/rlus are published at 3-hourly frequency only (not daily).</span>
+<span class="w">  </span><span class="c1"># Add  resample: daily  inside minuend and subtrahend blocks to downsample before</span>
+<span class="w">  </span><span class="c1"># the subtraction; the composite function applies it component-wise.</span>
+<span class="w">  </span><span class="c1">#</span>
+<span class="w">  </span><span class="c1"># CNRM-ESM2-1 note: rsds/rsus/rlds/rlus (and ps) not available on Pangeo for</span>
+<span class="w">  </span><span class="c1"># ssp370 (and possibly other scenarios).  Set  cmip6.access: esgf  in the config</span>
+<span class="w">  </span><span class="c1"># to fall back to OPeNDAP, then re-run the failed variables with --variable.</span>
+<span class="w">  </span><span class="nt">net_sw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">composite</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">minuend</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/{scenario}/rsds/day/r1i1p1f1&quot;</span>
+<span class="w">      </span><span class="nt">subtrahend</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/{scenario}/rsus/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">net_lw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">composite</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">minuend</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/{scenario}/rlds/day/r1i1p1f1&quot;</span>
+<span class="w">      </span><span class="nt">subtrahend</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/{scenario}/rlus/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">uas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/{scenario}/uas/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">vas</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/{scenario}/vas/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">ps</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/{scenario}/ps/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">psl</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/{scenario}/psl/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">huss</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/{scenario}/huss/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="c1"># evspsbl: mirror whichever option is active in historical above.</span>
+<span class="w">  </span><span class="c1">#</span>
+<span class="w">  </span><span class="c1"># Option A-1: monthly evspsbl (Amon table).</span>
+<span class="w">  </span><span class="nt">evspsbl</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://{model}/{scenario}/evspsbl/Amon/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="c1"># Option A-2: daily latent-heat flux → evspsbl conversion.</span>
+<span class="w">  </span><span class="c1"># Uncomment and comment out Option A-1 above to switch.</span>
+<span class="w">  </span><span class="c1"># evspsbl:</span>
+<span class="w">  </span><span class="c1">#   source: cmip6</span>
+<span class="w">  </span><span class="c1">#   uri:          &quot;cmip6://{model}/{scenario}/hfls/day/r1i1p1f1&quot;</span>
+<span class="w">  </span><span class="c1">#   scale_factor: 4.0e-7   # 1 / 2.5e6  (W m⁻² → kg m⁻² s⁻¹)</span>
+
+<span class="c1"># ── Temporal disaggregation ───────────────────────────────────────────────────</span>
+<span class="c1"># Elevates bias-corrected daily output to sub-daily frequency using the</span>
+<span class="c1"># climatological diurnal cycle from ERA5.  Works with all three correction</span>
+<span class="c1"># methods (delta / qm / qdm).</span>
+<span class="c1">#</span>
+<span class="c1"># Algorithm:</span>
+<span class="c1">#   additive  (+): future_hourly = daily_bc + ERA5_diurnal_anomaly(DOY, hour)</span>
+<span class="c1">#   multiplicative (*): future_hourly = daily_bc * ERA5_diurnal_ratio(DOY, hour)</span>
+<span class="c1">#</span>
+<span class="c1"># daily_bc daily-mean of future_hourly == daily_bc  (by construction)</span>
+<span class="c1">#</span>
+<span class="c1"># Point each variable to its ERA5 sub-daily file(s); use {year} placeholder</span>
+<span class="c1"># for multi-year archives.  Only variables listed here are disaggregated.</span>
+<span class="c1">#</span>
+<span class="nt">disaggregation</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">smooth_window</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15</span><span class="w">     </span><span class="c1"># half-width (days) of circular DOY-smoothing window;</span>
+<span class="w">                        </span><span class="c1"># set to 0 to disable smoothing</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">tas</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_t2m_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">t2m</span><span class="w">         </span><span class="c1"># ERA5 t2m and corrected tas are both in Kelvin</span>
+<span class="w">    </span><span class="nt">pr</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_tp_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tp</span>
+<span class="w">      </span><span class="c1"># ERA5 tp is in m per time step; CMIP6 pr is in kg m-2 s-1.</span>
+<span class="w">      </span><span class="c1"># The disaggregation diurnal-cycle computation uses ratios, so the</span>
+<span class="w">      </span><span class="c1"># unit mismatch cancels out — scale_factor is NOT needed here either.</span>
+<span class="w">    </span><span class="c1"># ERA5 ssr and str provide the diurnal cycle of NET radiation directly.</span>
+<span class="w">    </span><span class="c1"># ssr diurnal cycle: strong daytime peak, zero at night → multiplicative (*).</span>
+<span class="w">    </span><span class="c1"># str diurnal cycle: small amplitude (dominated by strd, which is near-constant)</span>
+<span class="w">    </span><span class="c1">#   → additive (+) consistent with net_lw kind.</span>
+<span class="w">    </span><span class="nt">net_sw</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_ssr_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssr</span>
+<span class="w">      </span><span class="nt">scale_factor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.000277778</span><span class="w">  </span><span class="c1"># J/m² → W/m²  (ERA5 hourly accumulation ÷ 3600 s)</span>
+<span class="w">    </span><span class="nt">net_lw</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_str_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">str</span>
+<span class="w">      </span><span class="nt">scale_factor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.000277778</span><span class="w">  </span><span class="c1"># J/m² → W/m²  (same)</span>
+<span class="w">    </span><span class="nt">uas</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_u10_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">u10</span>
+<span class="w">    </span><span class="nt">vas</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_v10_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">v10</span>
+<span class="w">    </span><span class="nt">ps</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_sp_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sp</span>
+<span class="w">      </span><span class="c1"># ERA5 sp in Pa, CMIP6 ps in Pa — no scale_factor needed.</span>
+<span class="w">    </span><span class="nt">psl</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_mslp_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mslp</span>
+<span class="w">      </span><span class="c1"># ERA5 mslp in Pa, CMIP6 psl in Pa — no scale_factor needed.</span>
+<span class="w">    </span><span class="nt">huss</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_d2m_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">d2m</span><span class="w">          </span><span class="c1"># ERA5 dew-point — triggers d2m→q conversion</span>
+<span class="w">      </span><span class="nt">sp_variable</span><span class="p">:</span><span class="w">   </span><span class="l l-Scalar l-Scalar-Plain">sp</span>
+<span class="w">      </span><span class="nt">sp_path</span><span class="p">:</span><span class="w">       </span><span class="s">&quot;${ERA5_FOLDER}/era5_sp_{year}.nc&quot;</span>
+<span class="w">      </span><span class="c1"># The diurnal ratio is computed from sub-daily q = f(d2m, sp), so the</span>
+<span class="w">      </span><span class="c1"># unit mismatch between d2m (K) and huss (kg/kg) is resolved internally.</span>
+<span class="w">      </span><span class="c1"># No scale_factor needed.</span>
+<span class="w">    </span><span class="nt">evspsbl</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${ERA5_FOLDER}/era5_e_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">e</span>
+<span class="w">      </span><span class="c1"># ERA5 e is negative for evaporation; the diurnal ratio ERA5_e_hour /</span>
+<span class="w">      </span><span class="c1"># ERA5_e_daily_mean uses ratios of like-signed values so the sign cancels.</span>
+<span class="w">      </span><span class="c1"># No scale_factor needed for disaggregation.</span>
+
+<span class="c1"># ── Online data cache ─────────────────────────────────────────────────────────</span>
+<span class="c1"># Copernicus Marine and CMIP6 datasets are saved here after the first download.</span>
+<span class="nt">cache</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">dir</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${CACHE_ROOT}/cmip6&quot;</span>
+
+<span class="c1"># ── Output ────────────────────────────────────────────────────────────────────</span>
+<span class="c1"># analyses_dir is used by bc-diagnostics to place outputs under</span>
+<span class="c1">#   &lt;analyses_dir&gt;/scenarios/&lt;scenario&gt;/   (BCDiagnosticsLayout convention)</span>
+<span class="c1"># dir is used by bc-correct for the bias-corrected NetCDF files.</span>
+<span class="c1"># {scenario} in dir and filename patterns is substituted from metadata.scenario.</span>
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">analyses_dir</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;${OCEANICU_ANALYSES_FOLDER}&quot;</span>
+<span class="w">  </span><span class="nt">dir</span><span class="p">:</span><span class="w">              </span><span class="s">&quot;${BIAS_CORRECTED_FOLDER}/{model}/{scenario}&quot;</span>
+<span class="w">  </span><span class="nt">filename_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{variable}_bc_{method}_{scenario}_{year}.nc&quot;</span><span class="w">        </span><span class="c1"># daily bias-corrected</span>
+<span class="w">  </span><span class="nt">disaggregated_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{variable}_bc_{method}_{scenario}_disagg_{year}.nc&quot;</span><span class="w">  </span><span class="c1"># sub-daily (if disagg enabled)</span>
+<span class="w">  </span><span class="nt">format</span><span class="p">:</span><span class="w">           </span><span class="l l-Scalar l-Scalar-Plain">netcdf4</span>
+<span class="w">  </span><span class="nt">compress</span><span class="p">:</span><span class="w">         </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">      </span><span class="c1"># zlib level-4 compression</span>
+</code></pre></div></article></div></main>
+<footer class="foot"><div class="footin"><img src="../../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

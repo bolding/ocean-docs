@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CMEMS Boundary Conditions Guide · ocean-* documentation</title>
+<meta name="description" content="CMEMS Boundary Conditions Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="index.html" aria-current="page">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-prep</a></div><h1>CMEMS Boundary Conditions Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-prep</h2><ul><li><a href="index.html">Overview</a></li><li><a href="model-setup.html">Model Setup Guide</a></li><li><a href="bathymetry.html">Bathymetry Guide</a></li><li><a href="boundaries-cmems.html" aria-current="page">CMEMS Boundary Conditions Guide</a></li><li><a href="boundaries-cmip6.html">CMIP6 Boundary Conditions Guide</a></li><li><a href="tidal-boundaries.html">Tidal + CMIP6 mean boundary conditions</a></li><li><a href="delta-change-boundaries.html">Delta-change boundary conditions</a></li><li><a href="boundary-diagnostics.html">Boundary Diagnostics Guide</a></li><li><a href="initial-conditions.html">Initial Conditions Guide</a></li><li><a href="radiation-bc.html">Radiation Bias Correction Guide</a></li><li><a href="humidity-bc.html">Humidity Bias Correction Guide</a></li><li><a href="bias-correction-guide.html">Bias Correction of Atmospheric Forcings — User &amp; Technical Guide</a></li></ul></aside><article class="doc"><h1 id="cmems-boundary-conditions-guide">CMEMS Boundary Conditions Guide</h1>
+<h2 id="overview">Overview</h2>
+<p>Downloads and interpolates ocean boundary conditions from the Copernicus Marine Service (CMEMS) onto the model open boundary points.</p>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Purpose</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>check-cmems-coverage</code></td>
+<td>Verify dataset extents and masked-halo widths before downloading</td>
+</tr>
+<tr>
+<td><code>run-cmems-boundaries</code></td>
+<td>Download and interpolate boundary conditions</td>
+</tr>
+<tr>
+<td><code>boundary-diagnostics</code></td>
+<td>QC plots and report for the output files</td>
+</tr>
+</tbody>
+</table>
+<p>Requires the <code>[cmems]</code> extra and a Copernicus Marine account:</p>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[cmems]&quot;</span>
+copernicusmarine<span class="w"> </span>login
+</code></pre></div>
+
+<hr />
+<h2 id="config-structure">Config structure</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># config/mymodel_bdy_create.yaml</span>
+
+<span class="nt">setup</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mymodel</span>
+
+<span class="nt">boundary_points</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file_path</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;./bdy_coords/mymodel_bdy_lonlat.txt&quot;</span><span class="w">   </span><span class="c1"># lon lat per line</span>
+
+<span class="nt">time_range</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start_date</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2015-01-01&quot;</span>
+<span class="w">  </span><span class="nt">end_date</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2026-01-01&quot;</span>
+
+<span class="nt">processing</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">chunk_size_days</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+<span class="w">  </span><span class="nt">bbox_buffer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.25</span>
+<span class="w">  </span><span class="nt">cache_directory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/data/cache/cmems/bdy&quot;</span><span class="w">   </span><span class="c1"># null to disable</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">base_directory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;./boundary_data/mymodel&quot;</span>
+<span class="w">  </span><span class="nt">filename_template</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{dataset_id}_{start_date}_to_{end_date}.nc&quot;</span>
+
+<span class="nt">datasets</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">temperature</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">category</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">physics</span>
+<span class="w">    </span><span class="nt">scenarios</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">dataset_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmems_mod_nws_phy-t_my_7km-3D_P1D-m&quot;</span>
+<span class="w">        </span><span class="nt">end_date</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-04-30&quot;</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">dataset_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmems_mod_nws_phy-tem_anfc_1.5km-3D_P1D-m&quot;</span>
+<span class="w">        </span><span class="nt">start_date</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2026-05-01&quot;</span>
+<span class="w">    </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">thetao</span>
+<span class="w">        </span><span class="nt">output_name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">votemper</span>
+<span class="w">    </span><span class="nt">depth_range</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">minimum</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+<span class="w">      </span><span class="nt">maximum</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5000.0</span>
+</code></pre></div>
+
+<h3 id="stitching-multiple-sources-in-time">Stitching multiple sources in time</h3>
+<p>Each dataset entry can list multiple scenarios with non-overlapping date ranges. The processor stitches them into a single output file, inserting a <code>transition_date</code> attribute.</p>
+<h3 id="segment-overrides">Segment overrides</h3>
+<p>Individual boundary segments can pull from a different source (useful when the primary product has a masked halo over part of the domain):</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">datasets</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">temperature</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">segment_overrides</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">7</span><span class="p">:</span><span class="w">                  </span><span class="c1"># segment index (0-based)</span>
+<span class="w">        </span><span class="nt">dataset_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmems_mod_bal_phy_my_P1D-m&quot;</span>
+<span class="w">        </span><span class="nt">on_gap</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">use_default</span><span class="w">   </span><span class="c1"># fall back to parent if override doesn&#39;t cover a period</span>
+</code></pre></div>
+
+<hr />
+<h2 id="workflow">Workflow</h2>
+<h3 id="1-check-coverage">1. Check coverage</h3>
+<div class="codehilite"><pre><span></span><code>check-cmems-coverage<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+check-cmems-coverage<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml<span class="w"> </span>--dataset<span class="w"> </span>temperature
+check-cmems-coverage<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml<span class="w"> </span>--download<span class="w">   </span><span class="c1"># also pre-cache</span>
+</code></pre></div>
+
+<p>Reports each dataset's spatial extent, masked-halo width, and whether all boundary points are covered.</p>
+<h3 id="2-dry-run">2. Dry run</h3>
+<div class="codehilite"><pre><span></span><code>run-cmems-boundaries<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml<span class="w"> </span>--dryrun
+</code></pre></div>
+
+<p>Runs coverage checks without downloading.</p>
+<h3 id="3-download">3. Download</h3>
+<div class="codehilite"><pre><span></span><code>run-cmems-boundaries<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+run-cmems-boundaries<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml<span class="w"> </span>--dataset<span class="w"> </span>temperature<span class="w"> </span>salinity
+run-cmems-boundaries<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml<span class="w"> </span>--category<span class="w"> </span>physics
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--dataset KEY …</code></td>
+<td>Process only these dataset keys</td>
+</tr>
+<tr>
+<td><code>--category CATEGORY …</code></td>
+<td>Filter by category (<code>physics</code>, <code>bio</code>)</td>
+</tr>
+<tr>
+<td><code>--download-only</code></td>
+<td>Cache data but skip interpolation and file writing</td>
+</tr>
+<tr>
+<td><code>--base-directory DIR</code></td>
+<td>Override output directory</td>
+</tr>
+</tbody>
+</table>
+<h3 id="4-qc-diagnostics">4. QC diagnostics</h3>
+<div class="codehilite"><pre><span></span><code>boundary-diagnostics<span class="w"> </span>--output-dir<span class="w"> </span>./boundary_data/mymodel<span class="w"> </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+</code></pre></div>
+
+<p>See <a href="boundary-diagnostics.html">boundary-diagnostics.md</a>.</p></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ocean-common · ocean-* documentation</title>
+<meta name="description" content="Small helpers shared by all packages">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="index.html" aria-current="page">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><h1>ocean-common</h1><p>Small helpers shared by all packages</p></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-common</h2><ul><li><a href="index.html" aria-current="page">Overview</a></li></ul></aside><article class="doc"><h1 id="ocean-common">ocean-common</h1>
+<p>Small, dependency-light utilities shared across the <code>ocean-*</code> family
+(<code>ocean-plot</code>, <code>ocean-post</code>, <code>ocean-prep</code>, <code>ocean-data</code>, ...). Created
+2026-10-24 out of the cross-repo code review, which found the same
+tty-aware tqdm wrapper reimplemented independently at least 9 times
+across three repos.</p>
+<p>Deliberately kept separate from <code>ocean-data</code> (a data-loader library with
+its own stated scope) rather than mixed into it, so this stays the
+obvious home for any <em>future</em> shared, generic utility too -- not just
+this one.</p>
+<h2 id="install">Install</h2>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+<span class="c1"># or, to guarantee tqdm is present (progress_iter works fine without it too):</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[progress]&quot;</span>
+</code></pre></div>
+
+<h2 id="modules">Modules</h2>
+<ul>
+<li>
+<p><strong><code>ocean_common.progress</code></strong> -- <code>progress_iter(iterable, **tqdm_kwargs)</code>:
+  wraps an iterable in <code>tqdm</code> when it's installed and stderr is a real
+  terminal, otherwise returns it unchanged. <code>show_progress()</code> gives the same
+  condition for callers that drive their own tqdm object; <code>HAS_TQDM</code> tells
+  whether tqdm is installed.</p>
+</li>
+<li>
+<p><strong><code>ocean_common.progress.progress_bar(total, desc)</code></strong> -- a manually
+  updated bar (<code>.update(n)</code>, <code>.close()</code>, <code>with</code>): tqdm, or a no-op object.</p>
+</li>
+<li><strong><code>ocean_common.log.setup_logging(verbose)</code></strong> -- the root-logger setup used
+  by every CLI (<code>HH:MM:SS  LEVEL  message</code>).</li>
+<li><strong><code>ocean_common.config.deep_merge(base, override)</code></strong> -- recursive dict merge.</li>
+<li><strong><code>ocean_common.version.get_version(dist_name, package_file)</code></strong> -- installed
+  version, else <code>git:&lt;hash&gt;</code> of the checkout.</li>
+</ul>
+<h2 id="testing">Testing</h2>
+<div class="codehilite"><pre><span></span><code>pytest
+</code></pre></div></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

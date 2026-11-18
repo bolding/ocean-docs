@@ -1,0 +1,208 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tidal Analysis Guide · ocean-* documentation</title>
+<meta name="description" content="Tidal Analysis Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="index.html" aria-current="page">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-post</a></div><h1>Tidal Analysis Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-post</h2><ul><li><a href="index.html">Overview</a></li><li><a href="run-validation.html">run-analyses Guide</a></li><li><a href="gridded-2d-validation.html">Gridded 2D Validation Guide</a></li><li><a href="gridded-3d-validation.html">Gridded 3D Validation Guide</a></li><li><a href="profile-validation.html">Profile Validation Guide</a></li><li><a href="tidal-analysis.html" aria-current="page">Tidal Analysis Guide</a></li><li><a href="mle-comparison.html">MLE Cross-Experiment Comparison Guide</a></li><li><a href="scenarios.html">Scenario Analysis Guide</a></li><li><a href="river-projection.html">River Flow and Nutrient Load Projection Guide</a></li><li><a href="regridding.html">Regridding User Guide</a></li><li><a href="simulation-list.html">Simulation List Guide</a></li><li><a href="statistics-db.html">Statistics Database Guide</a></li><li><a href="manage-analyses.html">manage-analyses Guide</a></li><li><a href="reporting.html">Reporting Guide</a></li></ul></aside><article class="doc"><h1 id="tidal-analysis-guide">Tidal Analysis Guide</h1>
+<h2 id="overview">Overview</h2>
+<p><code>tidal-analysis</code> extracts tidal harmonic constituents from model output and
+validates them against satellite tidal atlases (FES2014, TPXO9) or tide gauge
+records from the GESLA database.</p>
+<p>The harmonic analysis uses <code>utide</code> to fit sinusoidal components at each grid
+point or station location.  Model amplitudes and phases are then compared to the
+reference atlas or gauge data.</p>
+<h2 id="analysis-modes">Analysis modes</h2>
+<table>
+<thead>
+<tr>
+<th>Mode</th>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gesla</code></td>
+<td><code>--mode gesla</code></td>
+<td>Harmonic analysis at GESLA tide gauge locations (fast; recommended; config default)</td>
+</tr>
+<tr>
+<td><code>spatial</code></td>
+<td><code>--mode spatial</code></td>
+<td>Harmonic analysis on the full model grid, compared to a tidal atlas</td>
+</tr>
+<tr>
+<td><code>both</code></td>
+<td><code>--mode both</code></td>
+<td>Run spatial and GESLA together</td>
+</tr>
+<tr>
+<td><code>stations</code></td>
+<td><code>--mode stations</code></td>
+<td>Named stations listed under <code>stations:</code> in config</td>
+</tr>
+</tbody>
+</table>
+<h2 id="model-source---source----experiment">Model source: <code>--source</code> / <code>--experiment</code></h2>
+<p>The model file to read no longer lives in the per-run config. It comes from
+config/sources.yaml,
+keyed by <code>--source</code>, with <code>--experiment</code> naming the run folder under that
+source:</p>
+<div class="codehilite"><pre><span></span><code>tidal-analysis<span class="w"> </span>--config<span class="w"> </span>config/tidal_analysis.yaml<span class="w"> </span>--source<span class="w"> </span>CMEMS<span class="w"> </span>--experiment<span class="w"> </span>tidal<span class="w"> </span>--years<span class="w"> </span><span class="m">2011</span><span class="w"> </span><span class="m">2011</span>
+</code></pre></div>
+
+<p><code>--experiment</code> is required whenever <code>--source</code> is given — it is the run
+folder name (e.g. <code>tidal</code>, <code>run01</code>), not the full output label. The CLI
+builds the output label itself as <code>&lt;SOURCE&gt;/&lt;experiment&gt;</code> (and
+<code>&lt;SOURCE&gt;/&lt;model&gt;-&lt;scenario&gt;/&lt;experiment&gt;</code> for <code>CMIP6</code>/<code>CMIP6_raw</code>, via
+<code>--model</code>/<code>--scenario</code>), so <code>config['experiment']</code> in the printed summary is
+already the composite name.</p>
+<p>Current sources for NSe: <code>CMEMS</code>, <code>WOA</code>, <code>CMIP6</code> (bias-corrected forcing),
+<code>CMIP6_raw</code> (forcing without bias correction — e.g. the <code>ssp126</code> run).
+<code>CMIP6</code> vs <code>CMIP6_raw</code> is a real distinction, not a typo: use <code>CMIP6_raw</code>
+for any run whose atmospheric forcing was not bias-corrected.</p>
+<p>Without <code>--source</code>, the config's own <code>model.base_path</code> /
+<code>model.filename_pattern</code> are required instead (the pre-sources.yaml way);
+that path still works but is no longer how NSe runs are set up.</p>
+<h2 id="config-structure">Config structure</h2>
+<p>Annotated example:
+config/tidal_analysis.yaml</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># config/tidal_analysis.yaml</span>
+<span class="nt">area</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NSe</span>
+<span class="nt">experiment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">TPXO9</span><span class="w">        </span><span class="c1"># overridden by --experiment when --source is used</span>
+
+<span class="nt">years</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2020</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2022</span><span class="p p-Indicator">]</span><span class="w">      </span><span class="c1"># loads and concatenates 2020, 2021, 2022</span>
+<span class="c1"># For a single year use:  year: 2022</span>
+
+<span class="nt">constituents</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">M2</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">S2</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">K1</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">O1</span>
+<span class="w">  </span><span class="c1"># ... N2, K2, P1, Q1</span>
+
+<span class="nt">gesla</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${GESLA_FOLDER}/122848.csv</span>
+<span class="w">  </span><span class="nt">amp_units</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cm</span>
+<span class="w">  </span><span class="nt">filters</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Coastal</span>
+<span class="w">    </span><span class="nt">min_years</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">    </span><span class="nt">coverage</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">grid</span>
+<span class="w">    </span><span class="nt">grid_deg</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+
+<span class="nt">stations</span><span class="p">:</span><span class="w">                </span><span class="c1"># named stations for --mode stations</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Aberdeen</span>
+<span class="w">    </span><span class="nt">lon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-2.08</span>
+<span class="w">    </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">57.14</span>
+
+<span class="nt">reference</span><span class="p">:</span><span class="w">                </span><span class="c1"># spatial-mode atlas</span>
+<span class="w">  </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">FES2014</span>
+<span class="w">  </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">${TIDAL_FOLDER}/FES2014/ocean_tide.nc</span>
+
+<span class="nt">model</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pyGETM&quot;</span>
+<span class="w">  </span><span class="c1"># File location and the SSH variable come from config/sources.yaml when</span>
+<span class="w">  </span><span class="c1"># --source is given; see the --source section above.</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">analyses_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;${OCEANICU_ANALYSES_FOLDER}&quot;</span><span class="w">   </span><span class="c1"># no default — see below</span>
+<span class="w">  </span><span class="nt">plots</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">statistics</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+
+<span class="nt">analysis</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">mode</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gesla</span>
+</code></pre></div>
+
+<p>Required keys: <code>area</code>, <code>experiment</code>, and (only without <code>--source</code>)
+<code>model.base_path</code>, <code>model.filename_pattern</code>.</p>
+<h3 id="outputanalyses_dir-has-no-default"><code>output.analyses_dir</code> has no default</h3>
+<p><code>analyses_dir</code> must resolve to a real path — there is no <code>./analyses</code>
+fallback. It is expanded from <code>OCEANICU_ANALYSES_FOLDER</code> in this machine's
+data-roots file (<code>&lt;hostname&gt;_ocean-post_data_roots.yaml</code>), or set directly
+with <code>--analyses-dir</code>. If neither is set, the run stops immediately with an
+error naming the missing variable, rather than writing output somewhere
+unexpected (e.g. inside the code checkout).</p>
+<h2 id="usage">Usage</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># CMEMS, --source form (current NSe workflow)</span>
+tidal-analysis<span class="w"> </span>--config<span class="w"> </span>config/tidal_analysis.yaml<span class="w"> </span>--source<span class="w"> </span>CMEMS<span class="w"> </span>--experiment<span class="w"> </span>tidal<span class="w"> </span>--years<span class="w"> </span><span class="m">2011</span><span class="w"> </span><span class="m">2011</span><span class="w"> </span>--workers<span class="w"> </span><span class="m">16</span>
+
+<span class="c1"># WOA</span>
+tidal-analysis<span class="w"> </span>--config<span class="w"> </span>config/tidal_analysis.yaml<span class="w"> </span>--source<span class="w"> </span>WOA<span class="w"> </span>--experiment<span class="w"> </span>tidal<span class="w"> </span>--years<span class="w"> </span><span class="m">2011</span><span class="w"> </span><span class="m">2011</span><span class="w"> </span>--workers<span class="w"> </span><span class="m">16</span>
+
+<span class="c1"># CMIP6 historical</span>
+tidal-analysis<span class="w"> </span>--config<span class="w"> </span>config/tidal_analysis.yaml<span class="w"> </span>--source<span class="w"> </span>CMIP6<span class="w"> </span>--experiment<span class="w"> </span>tidal<span class="w"> </span>--years<span class="w"> </span><span class="m">2011</span><span class="w"> </span><span class="m">2011</span><span class="w"> </span>--workers<span class="w"> </span><span class="m">16</span>
+
+<span class="c1"># Spatial mode, single constituent</span>
+tidal-analysis<span class="w"> </span>--config<span class="w"> </span>config/tidal_analysis.yaml<span class="w"> </span>--source<span class="w"> </span>CMEMS<span class="w"> </span>--experiment<span class="w"> </span>tidal<span class="w"> </span>--mode<span class="w"> </span>spatial<span class="w"> </span>--constituents<span class="w"> </span>M2
+
+<span class="c1"># GESLA stations only (also the config default)</span>
+tidal-analysis<span class="w"> </span>--config<span class="w"> </span>config/tidal_analysis.yaml<span class="w"> </span>--source<span class="w"> </span>CMEMS<span class="w"> </span>--experiment<span class="w"> </span>tidal<span class="w"> </span>--mode<span class="w"> </span>gesla
+
+<span class="c1"># Append to an existing statistics file (useful when running multiple datasets)</span>
+tidal-analysis<span class="w"> </span>--config<span class="w"> </span>config/tidal_analysis.yaml<span class="w"> </span>--source<span class="w"> </span>CMEMS<span class="w"> </span>--experiment<span class="w"> </span>tidal<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--dataset-name<span class="w"> </span><span class="s2">&quot;FES2014&quot;</span><span class="w"> </span>--append-stats
+</code></pre></div>
+
+<h2 id="output">Output</h2>
+<div class="codehilite"><pre><span></span><code>&lt;OCEANICU_ANALYSES_FOLDER&gt;/areas/&lt;AREA&gt;/validations/&lt;SOURCE&gt;/&lt;experiment&gt;/
+├── plots/
+│   └── physics/
+│       └── pyGETM/
+│           └── &lt;period&gt;/        ← e.g. 2011
+│               └── tidal/
+│                   ├── &lt;const&gt;_comparison_&lt;...&gt;.png
+│                   └── gesla_station_comparison_maps_{diurnal,semidiurnal}.png
+└── tables/
+    └── physics/
+        └── pyGETM/
+            └── tidal/
+                ├── gesla_station_comparison.csv   ← one row per station × constituent
+                └── tidal_validation_statistics.txt
+</code></pre></div>
+
+<p>For <code>CMIP6</code>/<code>CMIP6_raw</code>, the path is
+<code>.../&lt;SOURCE&gt;/&lt;model&gt;-&lt;scenario&gt;/&lt;experiment&gt;/...</code>, e.g.
+<code>CMIP6_raw/GFDL-ESM4-ssp126/run01/</code>.</p>
+<p>Results are also written to the shared statistics database
+(<code>analyses/statistics.db</code>, table <code>tidal_statistics</code>) keyed on
+<code>area</code> + <code>experiment</code> (the composite <code>&lt;SOURCE&gt;/&lt;experiment&gt;</code> label), unless
+<code>--no-staging</code> is given.</p>
+<h2 id="statistics-file-format">Statistics file format</h2>
+<p><code>tidal_validation_statistics.txt</code> has one section per constituent with
+area-averaged metrics:</p>
+<div class="codehilite"><pre><span></span><code>M2 Amplitude
+  RMSE:        0.032 m
+  Bias:       -0.008 m
+  Correlation: 0.987
+
+M2 Phase
+  RMSE:        4.2 deg
+  Bias:        1.1 deg
+</code></pre></div>
+
+<p>When <code>--append-stats</code> is used, each call adds a new section labelled with
+<code>--dataset-name</code>, making it easy to compare multiple atlases or gauge datasets
+in one file.</p>
+<h2 id="hugo-reporting">Hugo reporting</h2>
+<p>Running <code>regenerate_hugo.py --apply</code> after a tidal run creates/updates the
+Hugo page at <code>content/validations/&lt;area&gt;-&lt;source&gt;-&lt;experiment&gt;.md</code> (with <code>/</code>
+and <code>_</code> in the label flattened to <code>-</code>, e.g. <code>nse-cmems-tidal.md</code>), including
+the GESLA station comparison table. See the reporting guide and
+the Hugo deployment guide.</p>
+<h2 id="performance">Performance</h2>
+<p>The spatial mode runs <code>utide.solve()</code> at every model grid point.  For large
+domains this is the bottleneck.  Use <code>--workers N</code> to parallelise across grid
+rows (default: all available CPUs).  A typical North Sea grid (200×300 points)
+with 8 years of hourly output takes 5–15 minutes depending on the number of
+constituents.</p>
+<p>The GESLA mode only analyses at gauge locations (~a few hundred) and is much
+faster.</p></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

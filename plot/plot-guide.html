@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Static Plot Guide · ocean-* documentation</title>
+<meta name="description" content="Static Plot Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="index.html" aria-current="page">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-plot</a></div><h1>Static Plot Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-plot</h2><ul><li><a href="index.html">Overview</a></li><li><a href="plot-guide.html" aria-current="page">Static Plot Guide</a></li><li><a href="animations-guide.html">Animations User Guide</a></li></ul></aside><article class="doc"><h1 id="static-plot-guide">Static Plot Guide</h1>
+<p><code>ocean-plot</code> renders a single map frame from a NetCDF variable and saves it as
+a PNG (or any matplotlib-supported format).  It uses the same Cartopy rendering
+pipeline as <code>ocean-animations</code>, so coastlines, land fill, and gridlines are
+included automatically when Cartopy is installed.</p>
+<hr />
+<h2 id="quick-start--init-plot-wizard">Quick start — init-plot wizard</h2>
+<div class="codehilite"><pre><span></span><code>init-plot
+<span class="c1"># → prompts for file, variable, time selection, subset, DPI</span>
+<span class="c1"># → writes e.g. sst_plot.yaml</span>
+
+ocean-plot<span class="w"> </span>--config<span class="w"> </span>sst_plot.yaml
+ocean-plot<span class="w"> </span>--config<span class="w"> </span>sst_plot.yaml<span class="w"> </span>--show<span class="w">    </span><span class="c1"># open in viewer after saving</span>
+</code></pre></div>
+
+<hr />
+<h2 id="config-format">Config format</h2>
+<p>Full documented template: <code>examples/plot_map.yaml</code>.</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">plottype</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">map</span><span class="w">          </span><span class="c1"># &#39;map&#39; (single frame) or &#39;map_mean&#39; (time average)</span>
+
+<span class="nt">input</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/ERA5/NA/era5_t2m_2019.nc</span>
+<span class="w">  </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">t2m</span>
+<span class="w">  </span><span class="c1"># time_slice:        # optional: restrict frames before the time selection</span>
+<span class="w">  </span><span class="c1">#   start: 0</span>
+<span class="w">  </span><span class="c1">#   end: 90</span>
+
+<span class="c1"># time_index: 30       # integer frame, &#39;mean&#39;, or omit for first frame</span>
+<span class="w">                       </span><span class="c1"># also settable via --time-index on the command line</span>
+
+<span class="nt">subset</span><span class="p">:</span><span class="w">                </span><span class="c1"># optional — omit for the full domain</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">48.0</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">65.0</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-12.0</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12.0</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># file: t2m_plot.png  # omit → &lt;variable&gt;_plot.png</span>
+<span class="w">  </span><span class="nt">dpi</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">150</span>
+
+<span class="c1"># title:     # omit → auto from long_name / standard_name</span>
+<span class="c1"># colormap:  # omit → auto from variable metadata</span>
+<span class="c1"># vmin:      # omit → data range</span>
+<span class="c1"># vmax:</span>
+</code></pre></div>
+
+<h3 id="time-selection">Time selection</h3>
+<table>
+<thead>
+<tr>
+<th>Setting</th>
+<th>Behaviour</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>time_index: 30</code></td>
+<td>Frame at index 30 (0-based)</td>
+</tr>
+<tr>
+<td><code>time_index: mean</code></td>
+<td>Mean over all loaded frames</td>
+</tr>
+<tr>
+<td><code>plottype: map_mean</code></td>
+<td>Equivalent to <code>time_index: mean</code></td>
+</tr>
+<tr>
+<td>omit both</td>
+<td>First frame (index 0)</td>
+</tr>
+</tbody>
+</table>
+<p>Combined with <code>input.time_slice</code>, you can average over a specific sub-range:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">input</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">time_slice</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">    </span><span class="nt">end</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">90</span><span class="w">      </span><span class="c1"># first 90 frames only</span>
+<span class="nt">time_index</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mean</span><span class="w">  </span><span class="c1"># mean over those 90 frames</span>
+</code></pre></div>
+
+<hr />
+<h2 id="annotations">Annotations</h2>
+<p>All five annotation types are supported; see the
+<a href="animations-guide.html#5-annotations">Animations guide</a> for the full syntax.
+<code>time_on</code> / <code>time_off</code> are accepted but silently ignored (all annotations are
+always drawn in static plots).</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">annotations</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">text</span>
+<span class="w">    </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">57.0</span>
+<span class="w">    </span><span class="nt">lon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4.0</span>
+<span class="w">    </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;North</span><span class="nv"> </span><span class="s">Sea&quot;</span>
+<span class="w">    </span><span class="nt">fontsize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">11</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">white</span>
+<span class="w">    </span><span class="nt">ha</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">center</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">point</span>
+<span class="w">    </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">54.5</span>
+<span class="w">    </span><span class="nt">lon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
+<span class="w">    </span><span class="nt">marker</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;*&quot;</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">red</span>
+<span class="w">    </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Station</span><span class="nv"> </span><span class="s">A&quot;</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">box</span>
+<span class="w">    </span><span class="nt">lat_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">54.0</span>
+<span class="w">    </span><span class="nt">lat_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">58.0</span>
+<span class="w">    </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.0</span>
+<span class="w">    </span><span class="nt">lon_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7.0</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">yellow</span>
+</code></pre></div>
+
+<hr />
+<h2 id="styling">Styling</h2>
+<p>matplotlib loads <code>matplotlibrc</code> from <code>~/.config/matplotlib/matplotlibrc</code> and
+from the current working directory automatically.  Use <code>style:</code> to select a
+named style or <code>.mplstyle</code> file for a single run:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">style</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">seaborn-v0_8-paper</span>
+</code></pre></div>
+
+<p>See the <a href="animations-guide.html#6-styling">Animations guide</a> for more detail.</p>
+<hr />
+<h2 id="cli-reference">CLI reference</h2>
+<div class="codehilite"><pre><span></span><code>ocean-plot<span class="w"> </span>--config<span class="w"> </span>plot.yaml<span class="w">                </span><span class="c1"># render and save</span>
+ocean-plot<span class="w"> </span>--config<span class="w"> </span>plot.yaml<span class="w"> </span>--show<span class="w">         </span><span class="c1"># open in viewer after saving</span>
+ocean-plot<span class="w"> </span>--config<span class="w"> </span>plot.yaml<span class="w"> </span>--time-index<span class="w"> </span><span class="m">30</span>
+ocean-plot<span class="w"> </span>--config<span class="w"> </span>plot.yaml<span class="w"> </span>--time-index<span class="w"> </span>mean
+ocean-plot<span class="w"> </span>--config<span class="w"> </span>plot.yaml<span class="w"> </span>--output<span class="w"> </span>my_plot.png<span class="w">   </span><span class="c1"># override output path</span>
+ocean-plot<span class="w"> </span>--info<span class="w"> </span>/data/model.nc<span class="w">             </span><span class="c1"># list variables, dimensions, and coordinates</span>
+</code></pre></div>
+
+<p><code>--info</code> prints the file dimensions, all coordinate variables (with units and
+long name), and all data variables — useful for discovering dimension names,
+depth levels, and time ranges before writing a config.</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--config FILE</code></td>
+<td>YAML configuration (required unless <code>--info</code>)</td>
+</tr>
+<tr>
+<td><code>--info FILE</code></td>
+<td>Describe variables, coordinates and dimensions in a NetCDF file and exit</td>
+</tr>
+<tr>
+<td><code>--show</code></td>
+<td>Open the saved plot in an interactive viewer</td>
+</tr>
+<tr>
+<td><code>--output FILE</code></td>
+<td>Override <code>output.file</code> from the config</td>
+</tr>
+<tr>
+<td><code>--time-index N\|mean</code></td>
+<td>Override <code>time_index</code> from the config</td>
+</tr>
+</tbody>
+</table></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

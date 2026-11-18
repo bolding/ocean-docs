@@ -1,0 +1,574 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ocean-prep · ocean-* documentation</title>
+<meta name="description" content="Model input: bathymetry, boundary and initial conditions, forcing bias correction">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="index.html" aria-current="page">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><h1>ocean-prep</h1><p>Model input: bathymetry, boundary and initial conditions, forcing bias correction</p></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-prep</h2><ul><li><a href="index.html" aria-current="page">Overview</a></li><li><a href="model-setup.html">Model Setup Guide</a></li><li><a href="bathymetry.html">Bathymetry Guide</a></li><li><a href="boundaries-cmems.html">CMEMS Boundary Conditions Guide</a></li><li><a href="boundaries-cmip6.html">CMIP6 Boundary Conditions Guide</a></li><li><a href="tidal-boundaries.html">Tidal + CMIP6 mean boundary conditions</a></li><li><a href="delta-change-boundaries.html">Delta-change boundary conditions</a></li><li><a href="boundary-diagnostics.html">Boundary Diagnostics Guide</a></li><li><a href="initial-conditions.html">Initial Conditions Guide</a></li><li><a href="radiation-bc.html">Radiation Bias Correction Guide</a></li><li><a href="humidity-bc.html">Humidity Bias Correction Guide</a></li><li><a href="bias-correction-guide.html">Bias Correction of Atmospheric Forcings — User &amp; Technical Guide</a></li></ul></aside><article class="doc"><h1 id="ocean-prep">ocean-prep</h1>
+<p>Ocean model input preparation — bathymetry, boundary conditions, and initial
+conditions.  Provides a unified CLI and Python API for the three tasks needed
+before running a regional ocean model:</p>
+<table>
+<thead>
+<tr>
+<th>Task</th>
+<th>CLI commands</th>
+<th>Config file</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Bathymetry</strong></td>
+<td><code>bathymetry-regrid</code>, <code>bathymetry-create-grid</code>, <code>bathymetry-splice</code></td>
+<td><code>&lt;model&gt;_bathy_create.yaml</code></td>
+</tr>
+<tr>
+<td><strong>Boundary conditions (historical)</strong></td>
+<td><code>run-cmems-boundaries</code>, <code>run-cmip6-boundaries</code></td>
+<td><code>&lt;model&gt;_bdy_create.yaml</code></td>
+</tr>
+<tr>
+<td><strong>Boundary conditions (future — tidal+CMIP6)</strong></td>
+<td><code>run-tidal-boundaries</code></td>
+<td><code>&lt;model&gt;_tidal_bdy.yaml</code></td>
+</tr>
+<tr>
+<td><strong>Boundary conditions (future — delta-change)</strong></td>
+<td><code>run-delta-boundaries</code></td>
+<td><code>&lt;model&gt;_delta_bdy.yaml</code></td>
+</tr>
+<tr>
+<td><strong>Initial conditions</strong></td>
+<td><code>download-init-conditions</code></td>
+<td><code>&lt;model&gt;_init_create.yaml</code></td>
+</tr>
+<tr>
+<td><strong>Bias correction</strong></td>
+<td><code>bc correct</code>, <code>bc diagnostics</code>, <code>bc check</code></td>
+<td><code>bc_correct_example.yaml</code></td>
+</tr>
+</tbody>
+</table>
+<p>For the full ocean-* toolkit, install via <a href="../install.html">ocean-stack</a> rather than this package alone.
+<code>ocean-stack</code> sets up all four packages in a single conda environment — the recommended route because <code>xesmf</code>/<code>esmpy</code>, used here for bathymetry regridding and bias correction, must come from conda-forge and cannot be reliably pip-installed.
+Use the standalone installation below only if you need this package in isolation.
+The full cross-package CLI reference is at ocean-stack/guides/cli-reference.md.</p>
+<p>Part of the <strong>ocean-*</strong> family:
+<a href="../data/index.html">ocean-data</a> ·
+<a href="../plot/index.html">ocean-plot</a> ·
+<a href="index.html">ocean-prep</a> ·
+<a href="../post/index.html">ocean-post</a></p>
+<hr />
+<h2 id="installation">Installation</h2>
+<p><code>xesmf</code> requires <code>esmpy</code> which must come from conda-forge — this is a
+family-wide constraint shared with <code>ocean-post</code>.  The recommended setup is
+therefore conda:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Clone sibling packages first</span>
+git<span class="w"> </span>clone<span class="w"> </span>...<span class="w"> </span>ocean-data
+git<span class="w"> </span>clone<span class="w"> </span>...<span class="w"> </span>ocean-plot
+git<span class="w"> </span>clone<span class="w"> </span>...<span class="w"> </span>ocean-prep
+
+<span class="nb">cd</span><span class="w"> </span>ocean-prep
+conda<span class="w"> </span>env<span class="w"> </span>create<span class="w"> </span>-f<span class="w"> </span>environment.yml
+conda<span class="w"> </span>activate<span class="w"> </span>ocean-prep
+</code></pre></div>
+
+<p><code>environment.yml</code> pip-installs <code>ocean-data</code>, <code>ocean-plot</code>, and <code>ocean-prep</code>
+itself in editable mode (<code>-e</code>), so changes to any of the three repos are
+immediately visible without reinstalling.</p>
+<h3 id="optional-extras">Optional extras</h3>
+<p>Uncomment the relevant lines in <code>environment.yml</code> before creating the
+environment, or install after activation:</p>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>copernicusmarine<span class="w">          </span><span class="c1"># CMEMS / Copernicus Marine download</span>
+pip<span class="w"> </span>install<span class="w"> </span>intake-esgf<span class="w"> </span>esgf-pyclient<span class="w"> </span><span class="c1"># CMIP6 via ESGF</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[bc]&quot;</span><span class="w">                </span><span class="c1"># bias correction (xesmf + copernicusmarine; needs conda esmpy)</span>
+</code></pre></div>
+
+<h3 id="pip-only-no-xesmf">pip-only (no xesmf)</h3>
+<p>If you don't need conservative bathymetry regridding you can skip conda:</p>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>../ocean-data
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>../ocean-plot
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[cmems]&quot;</span><span class="w">    </span><span class="c1"># add CMEMS download</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[plot]&quot;</span><span class="w">     </span><span class="c1"># add cartopy + cmocean (map plots)</span>
+</code></pre></div>
+
+<hr />
+<h2 id="model-setup-workflow">Model setup workflow</h2>
+<p>The intended pattern is one directory per model, containing a <code>config/</code>
+subfolder with the three YAML files.  Interactive wizards create the initial
+configs:</p>
+<div class="codehilite"><pre><span></span><code>mkdir<span class="w"> </span>mymodel<span class="w"> </span><span class="o">&amp;&amp;</span><span class="w"> </span><span class="nb">cd</span><span class="w"> </span>mymodel
+
+init-bathymetry<span class="w">           </span><span class="c1"># → config/mymodel_bathy_create.yaml</span>
+init-boundaries<span class="w">           </span><span class="c1"># → config/mymodel_bdy_create.yaml</span>
+init-initial-conditions<span class="w">   </span><span class="c1"># → config/mymodel_init_create.yaml</span>
+</code></pre></div>
+
+<p>Then run each pipeline from that directory:</p>
+<div class="codehilite"><pre><span></span><code>bathymetry-regrid<span class="w">            </span>--config<span class="w"> </span>config/mymodel_bathy_create.yaml
+run-cmems-boundaries<span class="w">         </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+download-init-conditions<span class="w">     </span>--config<span class="w"> </span>config/mymodel_init_create.yaml<span class="w"> </span>--source<span class="w"> </span>AMM7
+</code></pre></div>
+
+<hr />
+<h2 id="bathymetry">Bathymetry</h2>
+<p>Reads a high-resolution source (GEBCO, EMODnet) and regrids it conservatively
+onto the model target grid.  Produces a NetCDF bathymetry file and a Markdown
+report with diagnostic plots.</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Interactive config wizard</span>
+init-bathymetry
+
+<span class="c1"># Run the pipeline</span>
+bathymetry-regrid<span class="w">  </span>--config<span class="w"> </span>config/mymodel_bathy_create.yaml
+bathymetry-regrid<span class="w">  </span>--config<span class="w"> </span>config/mymodel_bathy_create.yaml<span class="w"> </span>--dryrun
+
+<span class="c1"># Generate a curvilinear supergrid (for rotated-pole or curvilinear models)</span>
+bathymetry-create-grid<span class="w">  </span>--config<span class="w"> </span>config/mymodel_grid_create.yaml
+</code></pre></div>
+
+<p>Config key fields:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/GEBCO_2023.nc</span><span class="w">      </span><span class="c1"># or emodnet</span>
+<span class="nt">grid</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-5.0</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15.0</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">47.0</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">62.0</span>
+<span class="w">  </span><span class="nt">dlat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+<span class="nt">regridding</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">min_depth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="nt">smooth</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">rx0</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.2</span>
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bathy_mymodel.nc</span>
+<span class="w">  </span><span class="nt">report_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./report/mymodel</span>
+</code></pre></div>
+
+<hr />
+<h2 id="boundary-conditions">Boundary conditions</h2>
+<h3 id="cmems-copernicus-marine--historical">CMEMS (Copernicus Marine) — historical</h3>
+<p>Downloads T, S, U, V, SSH from the NWS AMM7 or AMM15 reanalysis / ANFC
+products and writes NEMO-compatible boundary NetCDF files, one per variable.</p>
+<div class="codehilite"><pre><span></span><code>init-boundaries<span class="w">                                              </span><span class="c1"># create config</span>
+check-cmems-coverage<span class="w">  </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+run-cmems-boundaries<span class="w">  </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml<span class="w"> </span>--dryrun
+run-cmems-boundaries<span class="w">  </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+boundary-diagnostics<span class="w">  </span>--output-dir<span class="w"> </span>./boundary_data/mymodel<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+</code></pre></div>
+
+<h3 id="cmip6--historical-and-near-future">CMIP6 — historical and near-future</h3>
+<p>Downloads and interpolates CMIP6 model data onto boundary points.</p>
+<div class="codehilite"><pre><span></span><code>check-cmip6-coverage<span class="w">  </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+run-cmip6-boundaries<span class="w">  </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml
+</code></pre></div>
+
+<h3 id="future-projections--tidal--cmip6-mean-run-tidal-boundaries">Future projections — tidal + CMIP6 mean (<code>run-tidal-boundaries</code>)</h3>
+<p>Produces <strong>hourly</strong> SSH and barotropic transport boundary files for future
+climate projections.  Combines:</p>
+<ul>
+<li><strong>TPXO9</strong> tidal prediction (elevation + transports) — read directly from the
+  TPXO9 constituent NetCDF files with pure Python (xarray + scipy); no pygetm
+  conda environment needed.</li>
+<li><strong>CMIP6 monthly mean</strong> SSH / depth-integrated transport (zos, uo, vo) from a
+  specific model + scenario.</li>
+</ul>
+<div class="codehilite"><pre><span></span><code>zos(t)  = TPXO9 tidal η(t)  +  CMIP6 monthly zos        → hourly
+uo(t)   = TPXO9 tidal U(t)  +  CMIP6 monthly ∫uo·dz     → hourly
+vo(t)   = TPXO9 tidal V(t)  +  CMIP6 monthly ∫vo·dz     → hourly
+</code></pre></div>
+
+<p>The tidal prediction is <strong>cached</strong> per boundary-grid + time-range so it is
+computed only once, regardless of how many CMIP6 models or scenarios are run.</p>
+<p>Instead of the CMIP6 mean, the tide can be combined with the zos/uo/vo of a
+given boundary file (<code>--background-file</code>, <code>background.type: file</code>) or written
+alone (<code>--tpxo-only</code>, <code>background.type: none</code>); see
+<a href="tidal-boundaries.html">guides/tidal-boundaries.md</a>.</p>
+<div class="codehilite"><pre><span></span><code>run-tidal-boundaries<span class="w">  </span>--config<span class="w"> </span>config/mymodel_tidal_bdy.yaml
+run-tidal-boundaries<span class="w">  </span>--config<span class="w"> </span>config/mymodel_tidal_bdy.yaml<span class="w"> </span>--dryrun
+run-tidal-boundaries<span class="w">  </span>--config<span class="w"> </span>config/mymodel_tidal_bdy.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--start<span class="w"> </span><span class="m">2060</span>-01-01<span class="w"> </span>--end<span class="w"> </span><span class="m">2060</span>-12-31
+</code></pre></div>
+
+<p>Config key fields (<code>source_type: tidal_ssh</code>):</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">source_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tidal_ssh</span>
+<span class="nt">tpxo</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">root</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/TPXO9</span><span class="w">            </span><span class="c1"># directory with h_*.nc and u_*.nc constituent files</span>
+<span class="w">  </span><span class="nt">cache_dir</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/TPXO9/cache</span><span class="w"> </span><span class="c1"># shared TPXO cache across scenarios/models</span>
+<span class="nt">cmip6</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MPI-ESM1-2-HR</span>
+<span class="w">  </span><span class="nt">experiment_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssp370</span>
+<span class="w">  </span><span class="nt">access</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">  </span><span class="nt">local_root</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/CMIP6</span>
+<span class="w">  </span><span class="nt">table_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Omon</span>
+<span class="w">  </span><span class="nt">variant_label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">r1i1p1f1</span>
+<span class="w">  </span><span class="nt">grid_label</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">gn</span>
+<span class="nt">boundary_points</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file_path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./bdy_coords/nse_bdy_lonlat.txt</span>
+<span class="nt">time_range</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">start_date</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2015-01-01&quot;</span>
+<span class="w">  </span><span class="nt">end_date</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2100-12-31&quot;</span>
+<span class="w">  </span><span class="nt">calendar</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">standard</span>
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">base_directory</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse/tidal</span>
+<span class="w">  </span><span class="nt">filename_template</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;tidal_{source_id}_{experiment_id}_{start}_{end}.nc&quot;</span>
+</code></pre></div>
+
+<p>See <code>config/nse_tidal_bdy.yaml</code> for a fully annotated example.</p>
+<h3 id="future-projections--delta-change-run-delta-boundaries">Future projections — delta-change (<code>run-delta-boundaries</code>)</h3>
+<p>Produces boundary files that preserve high-resolution AMM7/AMM15 structure
+while adding the CMIP6 climate change signal:</p>
+<div class="codehilite"><pre><span></span><code>corrected(t) = AMM7/AMM15_ref(t_analog)
+             + [CMIP6_future_clim(month) − CMIP6_hist_clim(month)]
+</code></pre></div>
+
+<p><code>t_analog</code> cycles through the historical reference period (same day-of-year and
+hour, year mapped modulo the reference period length).  Works for T, S
+(3-D, monthly delta per depth level) and SSH/transport (2-D, optional
+depth-integration).</p>
+<p>This approach eliminates CMIP6 mean biases entirely while preserving synoptic
+variability and spatial structure from the high-resolution reanalysis.</p>
+<div class="codehilite"><pre><span></span><code>run-delta-boundaries<span class="w">  </span>--config<span class="w"> </span>config/mymodel_delta_bdy.yaml
+run-delta-boundaries<span class="w">  </span>--config<span class="w"> </span>config/mymodel_delta_bdy.yaml<span class="w"> </span>--dryrun
+run-delta-boundaries<span class="w">  </span>--config<span class="w"> </span>config/mymodel_delta_bdy.yaml<span class="w"> </span>--variable<span class="w"> </span>thetao<span class="w"> </span>so
+run-delta-boundaries<span class="w">  </span>--config<span class="w"> </span>config/mymodel_delta_bdy.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--scenario<span class="w"> </span>ssp126<span class="w"> </span>ssp245<span class="w"> </span>ssp370<span class="w"> </span>ssp585
+run-delta-boundaries<span class="w">  </span>--config<span class="w"> </span>config/mymodel_delta_bdy.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--future-start<span class="w"> </span><span class="m">2070</span>-01-01<span class="w"> </span>--future-end<span class="w"> </span><span class="m">2099</span>-12-31
+</code></pre></div>
+
+<p>Config key fields (<code>source_type: cmip6_delta_change</code>):</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">source_type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6_delta_change</span>
+<span class="nt">reference</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">directories</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">thetao</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse</span><span class="w">    </span><span class="c1"># daily/hourly files sit flat in the same dir now</span>
+<span class="w">    </span><span class="nt">so</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse</span>
+<span class="w">    </span><span class="nt">zos</span><span class="p">:</span><span class="w">     </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse</span>
+<span class="w">    </span><span class="nt">uo</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse</span>
+<span class="w">    </span><span class="nt">vo</span><span class="p">:</span><span class="w">      </span><span class="l l-Scalar l-Scalar-Plain">./boundary_data/nse</span>
+<span class="w">  </span><span class="nt">period</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1993-01-01&quot;</span>
+<span class="w">    </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2022-12-31&quot;</span>
+<span class="nt">cmip6</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MPI-ESM1-2-HR</span>
+<span class="w">  </span><span class="nt">experiment_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssp370</span>
+<span class="w">  </span><span class="nt">hist_period</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;1985-01-01&quot;</span>
+<span class="w">    </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2014-12-31&quot;</span>
+<span class="w">  </span><span class="nt">future_period</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;2070-01-01&quot;</span>
+<span class="w">    </span><span class="nt">end</span><span class="p">:</span><span class="w">   </span><span class="s">&quot;2099-12-31&quot;</span>
+<span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">thetao</span>
+<span class="w">    </span><span class="nt">cmip6_var</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">thetao</span>
+<span class="w">    </span><span class="nt">table_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Omon</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uo</span>
+<span class="w">    </span><span class="nt">cmip6_var</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">uo</span>
+<span class="w">    </span><span class="nt">table_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Omon</span>
+<span class="w">    </span><span class="nt">depth_integrate</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">    </span><span class="nt">frequency</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hourly</span>
+</code></pre></div>
+
+<p>See <code>config/nse_delta_bdy.yaml</code> for a fully annotated example and guide below.</p>
+<h3 id="boundary-diagnostics">Boundary diagnostics</h3>
+<p>Generates QC plots and a <code>REPORT.md</code> from the produced boundary NetCDF files:</p>
+<table>
+<thead>
+<tr>
+<th>Plot</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>map_&lt;var&gt;.png</code></td>
+<td>Boundary points coloured by segment; NaN points flagged</td>
+</tr>
+<tr>
+<td><code>timeseries_&lt;var&gt;.png</code></td>
+<td>Segment-mean surface (solid) and bottom (dashed) time series</td>
+</tr>
+<tr>
+<td><code>hovmoller_&lt;var&gt;.png</code></td>
+<td>Hovmöller (time × boundary index) at the surface</td>
+</tr>
+<tr>
+<td><code>profiles_&lt;var&gt;.png</code></td>
+<td>Mean depth profiles per segment</td>
+</tr>
+<tr>
+<td><code>seams_&lt;var&gt;.png</code></td>
+<td>Stitching-seam zoom (opt-in with <code>--check-seams</code>)</td>
+</tr>
+</tbody>
+</table>
+<p>The bottom time series uses each boundary point's geographically-fixed bottom
+depth (last depth level that is non-NaN at all time steps), averaged across the
+segment.</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Single output directory</span>
+boundary-diagnostics<span class="w">  </span>--output-dir<span class="w"> </span>./boundary_data/mymodel<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--config<span class="w"> </span>config/mymodel_bdy_create.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--check-seams
+
+<span class="c1"># Combine hourly + daily in one report</span>
+boundary-diagnostics<span class="w">  </span>--output-dir<span class="w"> </span>./boundary_data/mymodel/hourly<span class="w"> </span><span class="se">\</span>
+<span class="w">                                   </span>./boundary_data/mymodel/daily<span class="w"> </span><span class="se">\</span>
+<span class="w">                      </span>--labels<span class="w"> </span>1h<span class="w"> </span>1d
+</code></pre></div>
+
+<hr />
+<h2 id="initial-conditions">Initial conditions</h2>
+<p>Downloads 3-D T and S snapshots from NWS AMM7 (MY reanalysis) or AMM15 (ANFC)
+covering the model bounding box.  A Baltic fallback source fills the Kattegat /
+Belt Sea region where NWS products have a land mask.</p>
+<div class="codehilite"><pre><span></span><code>init-initial-conditions<span class="w">                                          </span><span class="c1"># create config</span>
+
+<span class="c1"># Coverage check</span>
+download-init-conditions<span class="w">  </span>--config<span class="w"> </span>config/mymodel_init_create.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                          </span>--source<span class="w"> </span>AMM7<span class="w">  </span>--check-coverage
+
+<span class="c1"># Download (dryrun first)</span>
+download-init-conditions<span class="w">  </span>--config<span class="w"> </span>config/mymodel_init_create.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                          </span>--source<span class="w"> </span>AMM7<span class="w">  </span>--dryrun
+download-init-conditions<span class="w">  </span>--config<span class="w"> </span>config/mymodel_init_create.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                          </span>--source<span class="w"> </span>AMM7
+
+<span class="c1"># AMM15 ANFC (2024-03-01 onwards)</span>
+download-init-conditions<span class="w">  </span>--config<span class="w"> </span>config/mymodel_init_create.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                          </span>--source<span class="w"> </span>AMM15<span class="w">  </span>--year<span class="w"> </span><span class="m">2025</span>
+
+<span class="c1"># IC diagnostics</span>
+ic-diagnostics<span class="w">  </span>--output-dir<span class="w"> </span>./init_data/mymodel
+ic-diagnostics<span class="w">  </span>--output-dir<span class="w"> </span>./init_data/mymodel<span class="w"> </span><span class="se">\</span>
+<span class="w">                </span>--diag-dir<span class="w"> </span>./init_data/mymodel/diagnostics
+</code></pre></div>
+
+<p>Config key fields:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">domain</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-8.0</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">13.0</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">47.5</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">62.0</span>
+<span class="nt">flood_fill</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">      </span><span class="c1"># fill land-masked cells for model interpolation</span>
+<span class="nt">sources</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">AMM7</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">year</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2015</span>
+<span class="w">    </span><span class="nt">datasets</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">temperature</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">sources</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">dataset_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmems_mod_nws_phy-t_my_7km-3D_P1D-m&quot;</span>
+<span class="w">            </span><span class="nt">priority</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">dataset_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmems_mod_bal_phy_my_P1D-m&quot;</span>
+<span class="w">            </span><span class="nt">priority</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">        </span><span class="nt">variables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[{</span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="nv">thetao</span><span class="p p-Indicator">}]</span>
+</code></pre></div>
+
+<hr />
+<h2 id="bias-correction">Bias correction</h2>
+<p>Bias-correct CMIP6 atmospheric forcing files against an observational reference
+(ERA5 or equivalent) using Quantile Delta Mapping, Quantile Mapping, or Delta
+methods.</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Check data availability before running</span>
+bc<span class="w"> </span>check<span class="w">        </span>--config<span class="w"> </span>config/bc_correct_example.yaml
+
+<span class="c1"># Apply bias correction (all variables in config)</span>
+bc<span class="w"> </span>correct<span class="w">      </span>--config<span class="w"> </span>config/bc_correct_example.yaml
+bc<span class="w"> </span>correct<span class="w">      </span>--config<span class="w"> </span>config/bc_correct_example.yaml<span class="w"> </span>--variable<span class="w"> </span>tas<span class="w"> </span>pr
+bc<span class="w"> </span>correct<span class="w">      </span>--config<span class="w"> </span>config/bc_correct_example.yaml<span class="w"> </span>--scenario<span class="w"> </span>ssp585
+bc<span class="w"> </span>correct<span class="w">      </span>--config<span class="w"> </span>config/bc_correct_example.yaml<span class="w"> </span>--model<span class="w"> </span>CNRM-ESM2-1
+
+<span class="c1"># Inspect correction quality</span>
+bc<span class="w"> </span>diagnostics<span class="w">  </span>--config<span class="w"> </span>config/bc_correct_example.yaml
+bc<span class="w"> </span>diagnostics<span class="w">  </span>--config<span class="w"> </span>config/bc_correct_example.yaml<span class="w"> </span>--variable<span class="w"> </span>tas<span class="w"> </span>--output-dir<span class="w"> </span>./diag/
+</code></pre></div>
+
+<p>A full annotated config is in <a href="examples/bc_correct_example.yaml.html"><code>config/bc_correct_example.yaml</code></a>.</p>
+<table>
+<thead>
+<tr>
+<th>Guide</th>
+<th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="humidity-bc.html">guides/humidity-bc.md</a></td>
+<td>ERA5 <code>d2m</code> + <code>sp</code> → specific humidity before QDM</td>
+</tr>
+<tr>
+<td><a href="radiation-bc.html">guides/radiation-bc.md</a></td>
+<td>Net SW/LW BC: ERA5 <code>ssr</code>/<code>str</code> vs CMIP6 <code>rsds−rsus</code>/<code>rlds−rlus</code></td>
+</tr>
+<tr>
+<td><a href="bias-correction-guide.html">docs/bias_correction_guide.md</a></td>
+<td>In-depth guide covering all methods and options</td>
+</tr>
+</tbody>
+</table>
+<p>The corrected forcing feeds directly into <code>ocean-post</code>'s <code>river-projection</code> and
+scenario analysis workflows.</p>
+<hr />
+<h2 id="nse-example-configs">NSe example configs</h2>
+<p>Ready-to-run configs for the North Sea–Baltic (NSe) model are in <code>config/</code>:</p>
+<div class="codehilite"><pre><span></span><code>config/nse_bdy_create.yaml<span class="w">     </span><span class="c1"># CMEMS boundaries for NSe</span>
+config/nse_init_create.yaml<span class="w">    </span><span class="c1"># initial conditions for NSe (AMM7 MY + AMM15 ANFC)</span>
+config/nse_tidal_bdy.yaml<span class="w">      </span><span class="c1"># tidal + CMIP6 mean hourly boundaries for NSe</span>
+config/nse_delta_bdy.yaml<span class="w">      </span><span class="c1"># delta-change boundaries for NSe</span>
+</code></pre></div>
+
+<p>The NSe boundary coordinate file is the canonical copy in
+<code>OceanICU/oceanicu_3d/NSe/Bathymetry/nse_bdy_lonlat.txt</code> (see that repo's
+<code>NSe/BOUNDARY_GENERATION.md</code>), referenced by each NSe config's
+<code>boundary_points.file_path</code> as a real absolute path — not a copy under
+<code>ocean-prep/bdy_coords/</code>, and not a symlink either (every setup has its own
+canonical copy under its own repo; a shared symlink target doesn't
+generalize across setups). Every other domain setup follows the same
+pattern: its own boundary-point file lives in its own repo, referenced
+directly by that setup's own configs.
+All commands are run from the <code>ocean-prep/</code> root:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Historical boundaries</span>
+check-cmems-coverage<span class="w">   </span>--config<span class="w"> </span>config/nse_bdy_create.yaml
+run-cmems-boundaries<span class="w">   </span>--config<span class="w"> </span>config/nse_bdy_create.yaml<span class="w"> </span>--dryrun
+run-cmems-boundaries<span class="w">   </span>--config<span class="w"> </span>config/nse_bdy_create.yaml
+boundary-diagnostics<span class="w">   </span>--output-dir<span class="w"> </span>./boundary_data/nse<span class="w"> </span><span class="se">\</span>
+<span class="w">                       </span>--config<span class="w"> </span>config/nse_bdy_create.yaml
+
+<span class="c1"># Future boundaries — tidal</span>
+run-tidal-boundaries<span class="w">   </span>--config<span class="w"> </span>config/nse_tidal_bdy.yaml
+
+<span class="c1"># Future boundaries — delta-change (T, S, SSH, transport)</span>
+run-delta-boundaries<span class="w">   </span>--config<span class="w"> </span>config/nse_delta_bdy.yaml
+run-delta-boundaries<span class="w">   </span>--config<span class="w"> </span>config/nse_delta_bdy.yaml<span class="w"> </span>--scenario<span class="w"> </span>ssp126<span class="w"> </span>ssp370<span class="w"> </span>ssp585
+
+<span class="c1"># Initial conditions</span>
+download-init-conditions<span class="w">  </span>--config<span class="w"> </span>config/nse_init_create.yaml<span class="w"> </span><span class="se">\</span>
+<span class="w">                          </span>--source<span class="w"> </span>AMM7<span class="w">  </span>--dryrun
+download-init-conditions<span class="w">  </span>--config<span class="w"> </span>config/nse_init_create.yaml<span class="w"> </span>--source<span class="w"> </span>AMM7
+download-init-conditions<span class="w">  </span>--config<span class="w"> </span>config/nse_init_create.yaml<span class="w"> </span>--source<span class="w"> </span>AMM15
+
+<span class="c1"># IC diagnostics</span>
+ic-diagnostics<span class="w">  </span>--output-dir<span class="w"> </span>./init_data/nse
+</code></pre></div>
+
+<hr />
+<h2 id="guides">Guides</h2>
+<table>
+<thead>
+<tr>
+<th>Guide</th>
+<th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="tidal-boundaries.html">guides/tidal-boundaries.md</a></td>
+<td>TPXO9 tidal + CMIP6 mean hourly boundaries</td>
+</tr>
+<tr>
+<td><a href="delta-change-boundaries.html">guides/delta-change-boundaries.md</a></td>
+<td>Delta-change method for future climate boundary conditions</td>
+</tr>
+<tr>
+<td><a href="humidity-bc.html">guides/humidity-bc.md</a></td>
+<td>ERA5 <code>d2m</code> + <code>sp</code> → specific humidity before QDM</td>
+</tr>
+<tr>
+<td><a href="radiation-bc.html">guides/radiation-bc.md</a></td>
+<td>Net SW/LW BC: ERA5 <code>ssr</code>/<code>str</code> vs CMIP6 <code>rsds−rsus</code>/<code>rlds−rlus</code></td>
+</tr>
+<tr>
+<td><a href="bias-correction-guide.html">docs/bias_correction_guide.md</a></td>
+<td>In-depth BC guide covering all methods and options</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="package-structure">Package structure</h2>
+<div class="codehilite"><pre><span></span><code>lib/                         ocean_prep package
+  bathymetry/                conservative interpolation, curvilinear grids
+  boundaries/                boundary extraction and future-projection tools
+    cmems_processor.py       CMEMS (AMM7/AMM15) boundary extraction
+    cmip6_processor.py       CMIP6 boundary extraction
+    tidal_boundary.py        TPXO9 tidal prediction + CMIP6 mean SSH/transport
+    delta_change.py          delta-change: AMM7/AMM15 cycling + CMIP6 change signal
+    diagnostics.py           QC plots + Markdown report for boundary output
+  initial_conditions/        domain-wide initial condition preparation
+    processor.py             IC extraction and flood-fill
+    diagnostics.py           QC plots + Markdown report for IC output
+  bias_correction/           CMIP6 atmospheric forcing bias correction
+    algorithms.py            Delta / QM / QDM correction functions
+    utils.py                 variable helpers (d2m→huss, unit alignment, regridding)
+    layout.py                BCDiagnosticsLayout — output path builder
+    cli_utils.py             config loading and logging
+cli/
+  init_bathymetry.py         wizard → config/&lt;model&gt;_bathy_create.yaml
+  init_boundaries.py         wizard → config/&lt;model&gt;_bdy_create.yaml
+  init_initial_conditions.py wizard → config/&lt;model&gt;_init_create.yaml
+  bathymetry_regrid.py
+  run_cmems_boundaries.py
+  run_cmip6_boundaries.py
+  run_tidal_boundaries.py    tidal + CMIP6 mean hourly boundaries
+  run_delta_boundaries.py    delta-change projection boundaries
+  check_cmems_coverage.py
+  check_cmip6_coverage.py
+  boundary_diagnostics.py
+  download_init_conditions.py
+  ic_diagnostics.py          IC QC plots
+  bc.py                      bc correct / bc diagnostics / bc check dispatcher
+  bias_correct_forcings.py   (bc-correct)
+  bc_diagnostics.py          (bc-diagnostics)
+  bc_check.py
+config/                      example and NSe configs
+  bc_correct_example.yaml    annotated bias correction example
+  nse_tidal_bdy.yaml         tidal + CMIP6 mean boundary config for NSe
+  nse_delta_bdy.yaml         delta-change boundary config for NSe
+bdy_coords/                  boundary coordinate files
+guides/
+  tidal-boundaries.md        TPXO9 + CMIP6 tidal boundary guide
+  delta-change-boundaries.md delta-change method guide
+  humidity-bc.md             d2m → specific humidity conversion guide
+  radiation-bc.md            net radiation BC guide
+docs/
+  bias_correction_guide.md   in-depth BC documentation
+</code></pre></div>
+
+<h2 id="key-dependencies">Key dependencies</h2>
+<table>
+<thead>
+<tr>
+<th>Package</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ocean-data</code></td>
+<td><code>CoordinateMapper</code> (coordinate name normalisation), CMEMS coverage checks, <code>RegridManager</code> (xESMF regridding for BC)</td>
+</tr>
+<tr>
+<td><code>ocean-plot</code></td>
+<td>Cartopy maps in bathymetry report and boundary diagnostics</td>
+</tr>
+<tr>
+<td><code>xesmf</code> / <code>esmpy</code></td>
+<td>Conservative bathymetry regridding and BC regridding (conda-forge only)</td>
+</tr>
+<tr>
+<td><code>copernicusmarine</code></td>
+<td>CMEMS download (optional extra <code>[cmems]</code>) and ERA5 reference data for BC (optional extra <code>[bc]</code>)</td>
+</tr>
+<tr>
+<td><code>scipy</code></td>
+<td>Spatial interpolation for CMIP6 and TPXO9 constituent data</td>
+</tr>
+</tbody>
+</table></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

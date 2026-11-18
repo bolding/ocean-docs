@@ -1,0 +1,1381 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Data Loader User Guide · ocean-* documentation</title>
+<meta name="description" content="Data Loader User Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="index.html" aria-current="page">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-data</a></div><h1>Data Loader User Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-data</h2><ul><li><a href="index.html">Overview</a></li><li><a href="data-loader.html" aria-current="page">Data Loader User Guide</a></li><li><a href="cmems-cmip6-variable-mapping.html">CMEMS / CMIP6 Variable Mapping</a></li></ul></aside><article class="doc"><h1 id="data-loader-user-guide">Data Loader User Guide</h1>
+<p>The data loader stack is the unified entry point for loading ocean model output
+and observation data from any source — local NetCDF files, cloud object stores,
+Copernicus Marine (CMEMS) remote datasets, CMIP6 model output from the PANGEO
+cloud catalog, and ISIMIP climate forcing data from the ISIMIP repository.</p>
+<h2 id="module-layout">Module layout</h2>
+<table>
+<thead>
+<tr>
+<th>Module</th>
+<th>Role</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lib/data_loader.py</code></td>
+<td><code>DataLoader</code> class — universal <code>load_data()</code>, config routing, subsetting</td>
+</tr>
+<tr>
+<td><code>lib/netcdf_loader.py</code></td>
+<td><code>NetCDFLoader</code> — triple-fallback time decoding, glob, singleton squeeze</td>
+</tr>
+<tr>
+<td><code>lib/csv_loader.py</code></td>
+<td><code>CSVLoader</code> — CSV / TSV tabular data, auto-detects time/lat/lon columns</td>
+</tr>
+<tr>
+<td><code>lib/copernicus_loader.py</code></td>
+<td><code>CopernicusLoader</code> — CMEMS remote access via <code>copernicusmarine</code></td>
+</tr>
+<tr>
+<td><code>lib/cmip6_loader.py</code></td>
+<td><code>CMIP6Loader</code> — PANGEO CMIP6 catalog via <code>intake-esm</code></td>
+</tr>
+<tr>
+<td><code>lib/isimip_loader.py</code></td>
+<td><code>ISIMIPLoader</code> — ISIMIP repository via REST API / <code>isimip-client</code></td>
+</tr>
+<tr>
+<td><code>lib/data_utils.py</code></td>
+<td>Shared spatial/time helpers used by all loaders</td>
+</tr>
+<tr>
+<td><code>cli/data_loader.py</code></td>
+<td><strong>CLI entry point</strong> — installed as the <code>data-loader</code> command</td>
+</tr>
+</tbody>
+</table>
+<p><code>lib/</code> modules are importable as <code>ocean_data.*</code> (an editable install); <code>cli/data_loader.py</code> is the <code>data-loader</code> executable.</p>
+<p><code>DataLoader.load_data()</code> delegates to the specialist loaders automatically:
+- <code>.nc</code> / glob / directory → <code>NetCDFLoader</code>
+- <code>.csv</code> / <code>.tsv</code> / <code>.txt</code> → <code>CSVLoader</code>
+- <code>.zarr</code> / cloud URI → xarray Zarr backend
+- <code>copernicus://</code> → <code>CopernicusLoader</code>
+- <code>cmip6://</code> → <code>CMIP6Loader</code>
+- <code>isimip://</code> → <code>ISIMIPLoader</code></p>
+<hr />
+<h2 id="contents">Contents</h2>
+<ol>
+<li><a href="#1-installation-and-setup">Installation and setup</a></li>
+<li><a href="#2-supported-sources">Supported sources</a></li>
+<li><a href="#3-local-files-and-glob-patterns">Local files and glob patterns</a></li>
+<li><a href="#4-shared-cli-options">Shared CLI options</a></li>
+<li><a href="#5-python-api--dataloader">Python API — DataLoader</a></li>
+<li><a href="#6-yaml-config-reference">YAML config reference</a></li>
+<li><a href="#7-longitude-conventions">Longitude conventions</a></li>
+<li><a href="#8-coordinate-name-handling">Coordinate name handling</a></li>
+<li><a href="#9-netcdf-loading-details">NetCDF loading details</a></li>
+<li><a href="#10-cloud-storage">Cloud storage</a></li>
+<li><a href="#11-copernicus-marine-cmems">Copernicus Marine (CMEMS)</a></li>
+<li><a href="#12-cmip6-pangeo--intake-esm">CMIP6 (PANGEO / intake-esm)</a></li>
+<li><a href="#13-isimip-climate-forcing-data">ISIMIP climate forcing data</a></li>
+<li><a href="#14-csv--tsv-data">CSV / TSV data</a></li>
+<li><a href="#15-troubleshooting">Troubleshooting</a></li>
+</ol>
+<hr />
+<h2 id="1-installation-and-setup">1. Installation and setup</h2>
+<p><strong>Core dependencies</strong> (always required):</p>
+<div class="codehilite"><pre><span></span><code>conda<span class="w"> </span>activate<span class="w"> </span>ocean-stack<span class="w">      </span><span class="c1"># see ocean-stack/environment.yml</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Feature</th>
+<th>Package(s)</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>CSV / TSV</td>
+<td><code>pandas</code></td>
+<td>usually already present</td>
+</tr>
+<tr>
+<td>Zarr / cloud</td>
+<td><code>zarr</code>, <code>s3fs</code>, <code>gcsfs</code>, <code>fsspec</code></td>
+<td>only for Zarr stores</td>
+</tr>
+<tr>
+<td>Copernicus Marine</td>
+<td><code>copernicusmarine</code></td>
+<td>+ <code>copernicusmarine login</code></td>
+</tr>
+<tr>
+<td>CMIP6</td>
+<td><code>intake</code>, <code>intake-esm</code>, <code>gcsfs</code></td>
+<td>PANGEO cloud catalog</td>
+</tr>
+<tr>
+<td>ISIMIP (full)</td>
+<td><code>isimip-client</code></td>
+<td>enables server-side cutout</td>
+</tr>
+<tr>
+<td>ISIMIP (basic)</td>
+<td><code>requests</code></td>
+<td>fallback; usually already present</td>
+</tr>
+</tbody>
+</table>
+<p>If an optional package is missing, the relevant feature raises a <code>RuntimeError</code>
+with install instructions; all other loader features are unaffected.</p>
+<p>For Copernicus Marine, credentials must be stored once:</p>
+<div class="codehilite"><pre><span></span><code>copernicusmarine<span class="w"> </span>login<span class="w">    </span><span class="c1"># prompts for CMEMS username/password</span>
+<span class="w">                          </span><span class="c1"># credentials stored in ~/.copernicusmarine/</span>
+</code></pre></div>
+
+<hr />
+<h2 id="2-supported-sources">2. Supported sources</h2>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>Path / identifier</th>
+<th>Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Local NetCDF — single file</td>
+<td><code>/data/sst.nc</code></td>
+<td></td>
+</tr>
+<tr>
+<td>Local NetCDF — glob</td>
+<td><code>/data/sst_2023*.nc</code></td>
+<td>Concatenated along time</td>
+</tr>
+<tr>
+<td>Local NetCDF — directory</td>
+<td><code>/data/sst/</code></td>
+<td>All <code>*.nc</code> files concatenated</td>
+</tr>
+<tr>
+<td>CSV / TSV — single file</td>
+<td><code>/data/obs.csv</code></td>
+<td>Auto-detected by extension</td>
+</tr>
+<tr>
+<td>CSV / TSV — glob</td>
+<td><code>/data/obs_202*.csv</code></td>
+<td>Concatenated along time</td>
+</tr>
+<tr>
+<td>Local Zarr</td>
+<td><code>/data/sst.zarr</code></td>
+<td>Requires <code>zarr</code></td>
+</tr>
+<tr>
+<td>S3 Zarr</td>
+<td><code>s3://bucket/sst.zarr</code></td>
+<td>Requires <code>s3fs</code></td>
+</tr>
+<tr>
+<td>Google Cloud Zarr</td>
+<td><code>gs://bucket/sst.zarr</code></td>
+<td>Requires <code>gcsfs</code></td>
+</tr>
+<tr>
+<td>CMEMS remote (ARCO/Zarr)</td>
+<td><code>copernicus://dataset_id</code></td>
+<td>Requires <code>copernicusmarine</code></td>
+</tr>
+<tr>
+<td>CMIP6 (PANGEO catalog)</td>
+<td><code>cmip6://SOURCE/EXPERIMENT/VARIABLE/TABLE/MEMBER</code></td>
+<td>Requires <code>intake</code>, <code>intake-esm</code>, <code>gcsfs</code></td>
+</tr>
+<tr>
+<td>ISIMIP repository</td>
+<td><code>isimip://ROUND/FORCING/SCENARIO/VARIABLE</code></td>
+<td>Requires <code>requests</code> (or <code>isimip-client</code>)</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-local-files-and-glob-patterns">3. Local files and glob patterns</h2>
+<h3 id="31-single-files-and-directories">3.1 Single files and directories</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Show file metadata (variables, dimensions, time range, domain)</span>
+data-loader<span class="w"> </span>/data/model.nc<span class="w"> </span>--info
+
+<span class="c1"># Load a specific variable and print the xarray summary</span>
+data-loader<span class="w"> </span>/data/model.nc<span class="w"> </span>--variable<span class="w"> </span>sst
+
+<span class="c1"># Works with directories too (all *.nc concatenated along time)</span>
+data-loader<span class="w"> </span>/data/model_output/<span class="w"> </span>--variable<span class="w"> </span>sst<span class="w"> </span>--info
+</code></pre></div>
+
+<h3 id="32-glob-patterns-multi-file-loading">3.2 Glob patterns (multi-file loading)</h3>
+<p>Pass a glob pattern as the path to load and concatenate multiple files.
+Quote the pattern to prevent the shell expanding it:</p>
+<div class="codehilite"><pre><span></span><code>data-loader<span class="w"> </span><span class="s1">&#39;/data/CCI-SST/sst_202*.nc&#39;</span><span class="w"> </span>--variable<span class="w"> </span>analysed_sst
+
+data-loader<span class="w"> </span><span class="s1">&#39;/data/OSTIA/2022/??/*.nc&#39;</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--variable<span class="w"> </span>analysed_sst<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--domain<span class="w"> </span>-5.<span class="w"> </span><span class="m">15</span>.<span class="w"> </span><span class="m">50</span>.<span class="w"> </span><span class="m">65</span>.<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>ostia_ns_2022.nc
+</code></pre></div>
+
+<p><strong>Supported wildcard characters</strong> (Python <code>glob</code> module):</p>
+<table>
+<thead>
+<tr>
+<th>Pattern</th>
+<th>Meaning</th>
+<th>Example match</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>*</code></td>
+<td>Any characters (one directory level)</td>
+<td><code>sst_202*.nc</code> → <code>sst_2021.nc</code>, <code>sst_2022.nc</code></td>
+</tr>
+<tr>
+<td><code>?</code></td>
+<td>Any single character</td>
+<td><code>??/*.nc</code> → <code>01/file.nc</code>, <code>12/file.nc</code></td>
+</tr>
+<tr>
+<td><code>[0-9]</code></td>
+<td>Character range</td>
+<td><code>sst_201[0-9].nc</code> → 2010–2019</td>
+</tr>
+<tr>
+<td><code>**</code></td>
+<td>Any number of directory levels</td>
+<td><code>**/ocean.nc</code> → any subdirectory</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Brace expansion <code>{a,b}</code> is a <strong>shell</strong> feature, not Python glob.
+For portable multi-pattern loading iterate in Python:
+<code>python
+files = sorted(glob('/data/2021/*.nc')) + sorted(glob('/data/2022/*.nc'))
+ds = xr.open_mfdataset(files, combine='by_coords')</code></p>
+</blockquote>
+<p>Files are sorted alphabetically before concatenation; standard <code>YYYYMM</code> /
+<code>YYYYMMDD</code> naming gives chronological order automatically.</p>
+<p><strong>Python API:</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.data_loader</span> <span class="kn">import</span> <span class="n">DataLoader</span>
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">()</span>
+
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;/data/CCI-SST/sst_202*.nc&#39;</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;analysed_sst&#39;</span><span class="p">)</span>
+
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;/data/OSTIA/2022/??/*.nc&#39;</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;analysed_sst&#39;</span><span class="p">,</span>
+                      <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span>
+                              <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">})</span>
+</code></pre></div>
+
+<hr />
+<h2 id="4-shared-cli-options">4. Shared CLI options</h2>
+<p>These options apply to all <code>data-loader</code> calls regardless of
+the data source.</p>
+<h3 id="41---domain-lon_min-lon_max-lat_min-lat_max">4.1 <code>--domain lon_min lon_max lat_min lat_max</code></h3>
+<p>Four space-separated floats.  Both −180..180 and 0..360 longitudes are
+accepted; values &gt; 180 are automatically normalised to −180..180.</p>
+<div class="codehilite"><pre><span></span><code>--domain<span class="w"> </span>-5.<span class="w"> </span><span class="m">15</span>.<span class="w"> </span><span class="m">50</span>.<span class="w"> </span><span class="m">65</span>.<span class="w">     </span><span class="c1"># -180..180</span>
+--domain<span class="w"> </span><span class="m">355</span>.<span class="w"> </span><span class="m">15</span>.<span class="w"> </span><span class="m">50</span>.<span class="w"> </span><span class="m">65</span>.<span class="w">    </span><span class="c1"># 0..360, same region</span>
+</code></pre></div>
+
+<blockquote>
+<p>Because the shell can mistake a leading <code>-</code> for a flag, place <code>--domain</code>
+last on the command line, or use trailing-dot floats (<code>-5.</code>).</p>
+</blockquote>
+<h3 id="42---time-range-start-end">4.2 <code>--time-range START END</code></h3>
+<div class="codehilite"><pre><span></span><code>--time-range<span class="w"> </span><span class="m">2023</span>-01-01<span class="w"> </span><span class="m">2023</span>-12-31
+</code></pre></div>
+
+<p>Passed directly to the remote API for CMEMS / CMIP6 / ISIMIP; applied with
+xarray time selection for local files.</p>
+<h3 id="43---config-file----section-name">4.3 <code>--config FILE</code> / <code>--section NAME</code></h3>
+<p>Load a named block from a YAML config file instead of specifying all
+parameters on the command line.</p>
+<div class="codehilite"><pre><span></span><code>data-loader<span class="w"> </span>--config<span class="w"> </span>my_experiment.yaml
+data-loader<span class="w"> </span>--config<span class="w"> </span>my_experiment.yaml<span class="w"> </span>--section<span class="w"> </span>sst_cmems
+</code></pre></div>
+
+<p>See <a href="#6-yaml-config-reference">YAML config reference</a> for the config format.</p>
+<h3 id="44---output-file">4.4 <code>--output FILE</code></h3>
+<p>Save the loaded dataset to NetCDF, or metadata to JSON (for <code>--*-describe</code>
+and <code>--*-catalog</code> commands).  The extension is added automatically if omitted
+(<code>.nc</code> for datasets, <code>.json</code> for metadata).</p>
+<hr />
+<h2 id="5-python-api--dataloader">5. Python API — DataLoader</h2>
+<div class="codehilite"><pre><span></span><code><span class="kn">import</span> <span class="nn">sys</span>
+<span class="n">sys</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="s1">&#39;lib&#39;</span><span class="p">)</span>   <span class="c1"># run from the repo root, or use an absolute path</span>
+
+<span class="kn">from</span> <span class="nn">ocean_data.data_loader</span> <span class="kn">import</span> <span class="n">DataLoader</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">()</span>
+</code></pre></div>
+
+<blockquote>
+<p><code>lib/</code> is not a Python package (no <code>__init__.py</code>), so always insert it on
+<code>sys.path</code> before importing.  The <code>python/</code> scripts do this automatically.</p>
+</blockquote>
+<h3 id="51-load_data">5.1 <code>load_data()</code></h3>
+<p>Universal entry point — auto-detects format from the path or routes on URI scheme.</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Local NetCDF</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;/data/model.nc&#39;</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;sst&#39;</span><span class="p">)</span>
+
+<span class="c1"># Glob pattern</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;/data/sst_2023*.nc&#39;</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;analysed_sst&#39;</span><span class="p">)</span>
+
+<span class="c1"># Local Zarr</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;/data/model.zarr&#39;</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;sst&#39;</span><span class="p">)</span>
+
+<span class="c1"># Copernicus Marine via URI</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span>
+    <span class="s1">&#39;copernicus://cmems_obs-sst_atl_phy_nrt_l3s_P1D-m&#39;</span><span class="p">,</span>
+    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;sea_surface_temperature&#39;</span><span class="p">,</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+    <span class="n">time_range</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;2023-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2023-01-31&#39;</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="c1"># CMIP6 via URI</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span>
+    <span class="s1">&#39;cmip6://CESM2/historical/tos/Omon/r1i1p1f1&#39;</span><span class="p">,</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+    <span class="n">time_range</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;1990-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;1999-12-31&#39;</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="c1"># ISIMIP via URI</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span>
+    <span class="s1">&#39;isimip://ISIMIP3b/MRI-ESM2-0/ssp585/tas&#39;</span><span class="p">,</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+    <span class="n">time_range</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;2060-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2069-12-31&#39;</span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p><strong>Key parameters:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Parameter</th>
+<th>Type</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>path</code></td>
+<td>str / Path</td>
+<td>Local path, cloud URI, or <code>copernicus://</code> / <code>cmip6://</code> / <code>isimip://</code> URI</td>
+</tr>
+<tr>
+<td><code>variable</code></td>
+<td>str</td>
+<td>Single variable to extract (loads all if omitted)</td>
+</tr>
+<tr>
+<td><code>format</code></td>
+<td>str</td>
+<td><code>'netcdf'</code>, <code>'zarr'</code>, <code>'copernicus'</code>, <code>'cmip6'</code>, <code>'isimip'</code> (auto-detected)</td>
+</tr>
+<tr>
+<td><code>time_range</code></td>
+<td>tuple</td>
+<td><code>('YYYY-MM-DD', 'YYYY-MM-DD')</code> date subsetting</td>
+</tr>
+<tr>
+<td><code>time_slice</code></td>
+<td>dict</td>
+<td><code>{'start': 0, 'end': 10}</code> index-based subsetting</td>
+</tr>
+<tr>
+<td><code>domain</code></td>
+<td>dict</td>
+<td><code>{'lon_min', 'lon_max', 'lat_min', 'lat_max'}</code></td>
+</tr>
+<tr>
+<td><code>chunks</code></td>
+<td>dict / <code>'auto'</code></td>
+<td>Dask chunking</td>
+</tr>
+<tr>
+<td><code>storage_options</code></td>
+<td>dict</td>
+<td>Cloud credentials (see <a href="#10-cloud-storage">Cloud storage</a>)</td>
+</tr>
+<tr>
+<td><code>decode_times</code></td>
+<td>bool</td>
+<td>CF time decoding (default <code>True</code>)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="52-load_from_config">5.2 <code>load_from_config()</code></h3>
+<p>Reads a YAML config block and dispatches to the right loader.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">import</span> <span class="nn">yaml</span>
+
+<span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="s1">&#39;my_config.yaml&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="n">config</span> <span class="o">=</span> <span class="n">yaml</span><span class="o">.</span><span class="n">safe_load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+<span class="n">ds</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="o">.</span><span class="n">load_from_config</span><span class="p">(</span><span class="n">config</span><span class="p">)</span>                       <span class="c1"># default section</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="o">.</span><span class="n">load_from_config</span><span class="p">(</span><span class="n">config</span><span class="p">,</span> <span class="n">section</span><span class="o">=</span><span class="s1">&#39;sst_cmems&#39;</span><span class="p">)</span> <span class="c1"># named section</span>
+</code></pre></div>
+
+<p>See <a href="#6-yaml-config-reference">YAML config reference</a> for the full format.</p>
+<h3 id="53-load_model_data">5.3 <code>load_model_data()</code></h3>
+<p>Higher-level helpers for local files with time-range and domain subsetting.</p>
+<div class="codehilite"><pre><span></span><code><span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_model_data</span><span class="p">(</span>
+    <span class="s1">&#39;/data/model/output/&#39;</span><span class="p">,</span>
+    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;temp&#39;</span><span class="p">,</span>
+    <span class="n">time_range</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;2021-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2021-12-31&#39;</span><span class="p">),</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">10</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">60</span><span class="p">},</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>The path may be a file, a glob pattern or a directory (files named after the
+variable are preferred). Variable names and dimensions are kept as in the
+file; <code>variable</code> is resolved through the name aliases, and a variable that is
+not there raises <code>ValueError</code>. With <code>chunks=</code> (e.g. <code>{'time': 30}</code>) the result
+is dask-backed, otherwise numpy-backed; both hold the same data.</p>
+<p><strong>Module-level convenience functions</strong> (no need to instantiate <code>DataLoader</code>):</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.data_loader</span> <span class="kn">import</span> <span class="n">load_model_data</span><span class="p">,</span> <span class="n">get_file_info</span>
+
+<span class="n">ds</span>   <span class="o">=</span> <span class="n">load_model_data</span><span class="p">(</span><span class="s1">&#39;/data/model.nc&#39;</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;sst&#39;</span><span class="p">)</span>
+<span class="n">info</span> <span class="o">=</span> <span class="n">get_file_info</span><span class="p">(</span><span class="s1">&#39;/data/model.nc&#39;</span><span class="p">)</span>
+</code></pre></div>
+
+<h3 id="54-cache-cache_dir">5.4 Cache (<code>cache_dir</code>)</h3>
+<p>CMIP6 (<code>cmip6://</code>, <code>pangeo://</code>) and Copernicus Marine fetches are saved in
+<code>cache_dir</code>. A request is served from a cached file when either</p>
+<ul>
+<li>its exact request (source, variables, domain, time range, depth range) was
+  cached before, or</li>
+<li>a cached file has the same source id (including member, table, frequency
+  and grid), the same variables and the same depth range, and its time range
+  and domain cover the request (32-day and 0.5-degree tolerance).</li>
+</ul>
+<p>The identity for the second case is stored in the file's global attribute
+<code>ocean_data_cache_identity</code>. Files cached before that attribute existed serve
+exact requests only.</p>
+<hr />
+<h2 id="6-yaml-config-reference">6. YAML config reference</h2>
+<p>Used with <code>load_from_config()</code> and <code>--config</code>.  A single YAML file can hold
+multiple named blocks; pass the block name to <code>--section</code> or
+<code>load_from_config(section=...)</code>.</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># In my_config.yaml</span>
+<span class="nt">sst_local</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/CCI-SST/sst_2023.nc</span>
+<span class="w">  </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">analysed_sst</span>
+
+<span class="nt">sst_cmems</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">copernicus</span>
+<span class="w">  </span><span class="nt">dataset_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmems_obs-sst_atl_phy_nrt_l3s_P1D-m</span>
+<span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">...</span>
+</code></pre></div>
+
+<div class="codehilite"><pre><span></span><code>data-loader<span class="w"> </span>--config<span class="w"> </span>my_config.yaml<span class="w"> </span>--section<span class="w"> </span>sst_cmems
+</code></pre></div>
+
+<h3 id="local-or-cloud-file">Local or cloud file</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">observations</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">path</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/CCI-SST/sst_2023.nc</span><span class="w">    </span><span class="c1"># glob patterns accepted</span>
+<span class="w">  </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">analysed_sst</span>
+<span class="w">  </span><span class="nt">domain</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-15.</span>
+<span class="w">    </span><span class="nt">lon_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">15.</span>
+<span class="w">    </span><span class="nt">lat_min</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">50.</span>
+<span class="w">    </span><span class="nt">lat_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">65.</span>
+<span class="w">  </span><span class="nt">time_range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;2023-01-01&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;2023-12-31&quot;</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+
+<h3 id="copernicus-marine-source">Copernicus Marine source</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">observations</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">copernicus</span>
+<span class="w">  </span><span class="nt">dataset_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmems_obs-sst_atl_phy_nrt_l3s_P1D-m</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sea_surface_temperature</span>
+<span class="w">  </span><span class="nt">domain</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-15.</span>
+<span class="w">    </span><span class="nt">lon_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">15.</span>
+<span class="w">    </span><span class="nt">lat_min</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">50.</span>
+<span class="w">    </span><span class="nt">lat_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">65.</span>
+<span class="w">  </span><span class="nt">time_range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;2023-01-01&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;2023-12-31&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">minimum_depth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.</span><span class="w">         </span><span class="c1"># optional — depth subsetting in metres</span>
+<span class="w">  </span><span class="nt">maximum_depth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10.</span><span class="w">        </span><span class="c1"># optional</span>
+<span class="w">  </span><span class="nt">service</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">arco-geo-series</span><span class="w">  </span><span class="c1"># optional — force a specific service type</span>
+</code></pre></div>
+
+<h3 id="cmip6-source">CMIP6 source</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">observations</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">  </span><span class="nt">source_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">CESM2</span>
+<span class="w">  </span><span class="nt">experiment_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssp585</span>
+<span class="w">  </span><span class="nt">variable_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tas</span>
+<span class="w">  </span><span class="nt">table_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Amon</span><span class="w">      </span><span class="c1"># Omon for ocean vars, Amon for atmosphere</span>
+<span class="w">  </span><span class="nt">member_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">r1i1p1f1</span>
+<span class="w">  </span><span class="nt">domain</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-15.</span>
+<span class="w">    </span><span class="nt">lon_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">15.</span>
+<span class="w">    </span><span class="nt">lat_min</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">50.</span>
+<span class="w">    </span><span class="nt">lat_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">65.</span>
+<span class="w">  </span><span class="nt">time_range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;2020-01-01&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;2099-12-31&quot;</span><span class="p p-Indicator">]</span>
+</code></pre></div>
+
+<h3 id="isimip-source">ISIMIP source</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">observations</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">isimip</span>
+<span class="w">  </span><span class="nt">simulation_round</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ISIMIP3b</span><span class="w">      </span><span class="c1"># ISIMIP3a, ISIMIP3b, ISIMIP2a, ISIMIP2b</span>
+<span class="w">  </span><span class="nt">climate_forcing</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">MRI-ESM2-0</span><span class="w">    </span><span class="c1"># W5E5, GSWP3-W5E5, MRI-ESM2-0, UKESM1-0-LL, …</span>
+<span class="w">  </span><span class="nt">climate_scenario</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssp585</span><span class="w">        </span><span class="c1"># historical, obsclim, ssp126, ssp370, ssp585</span>
+<span class="w">  </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">tas</span><span class="w">                   </span><span class="c1"># tas, pr, rsds, rlds, uas, vas, hurs, ps, …</span>
+<span class="w">  </span><span class="nt">domain</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-15.</span>
+<span class="w">    </span><span class="nt">lon_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">15.</span>
+<span class="w">    </span><span class="nt">lat_min</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">50.</span>
+<span class="w">    </span><span class="nt">lat_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">65.</span>
+<span class="w">  </span><span class="nt">time_range</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="s">&quot;2020-01-01&quot;</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="s">&quot;2099-12-31&quot;</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="c1"># cutout: true    # default; false to force full download + local subset</span>
+</code></pre></div>
+
+<h3 id="legacy--plain-path-string">Legacy — plain path string</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">observations</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/CCI-SST/sst_2023.nc</span>
+</code></pre></div>
+
+<hr />
+<h2 id="7-longitude-conventions">7. Longitude conventions</h2>
+<p>All domain dicts are stored internally in −180..180.  The data's convention
+is <strong>detected automatically</strong> at subsetting time and the domain is converted
+to match — no manual conversion is needed.</p>
+<table>
+<thead>
+<tr>
+<th>User input</th>
+<th>Data convention</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>−180..180</td>
+<td>−180..180</td>
+<td>direct</td>
+</tr>
+<tr>
+<td>−180..180</td>
+<td>0..360</td>
+<td>converted automatically</td>
+</tr>
+<tr>
+<td>0..360</td>
+<td>0..360</td>
+<td>converted automatically</td>
+</tr>
+<tr>
+<td>0..360</td>
+<td>−180..180</td>
+<td>converted automatically</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Wrap-around domains</strong> (e.g. lon_min=350, lon_max=10 crossing the dateline)
+are handled with an OR mask so no data is missed at the seam.</p>
+<p><strong>CLI:</strong> values &gt; 180 are normalised when parsed:</p>
+<div class="codehilite"><pre><span></span><code>--domain<span class="w"> </span><span class="m">345</span>.<span class="w"> </span><span class="m">15</span>.<span class="w"> </span><span class="m">50</span>.<span class="w"> </span><span class="m">65</span>.<span class="w">    </span><span class="c1"># 345 → -15, result: lon -15..15 lat 50..65</span>
+</code></pre></div>
+
+<hr />
+<h2 id="8-coordinate-name-handling">8. Coordinate name handling</h2>
+<p><code>CoordinateMapper</code> (from <code>lib/name_mappings.py</code>, configured in
+<code>config/name_mappings.yaml</code>) resolves non-standard coordinate names
+automatically.  You never need to hard-code <code>ds['nav_lat']</code> or similar.</p>
+<table>
+<thead>
+<tr>
+<th>Coordinate</th>
+<th>Known aliases</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>latitude</td>
+<td><code>lat</code>, <code>latitude</code>, <code>latt</code>, <code>nav_lat</code>, <code>TLAT</code>, <code>lat_rho</code>, <code>ylat</code></td>
+</tr>
+<tr>
+<td>longitude</td>
+<td><code>lon</code>, <code>longitude</code>, <code>lont</code>, <code>nav_lon</code>, <code>TLONG</code>, <code>lon_rho</code>, <code>xlon</code></td>
+</tr>
+<tr>
+<td>time</td>
+<td><code>time</code>, <code>ocean_time</code>, <code>valid_time</code>, <code>mt</code>, <code>t</code></td>
+</tr>
+<tr>
+<td>depth</td>
+<td><code>depth</code>, <code>z</code>, <code>lev</code>, <code>level</code>, <code>s_rho</code></td>
+</tr>
+</tbody>
+</table>
+<p>To add support for a new model format, add its coordinate names to
+<code>config/name_mappings.yaml</code> — no Python changes needed.</p>
+<hr />
+<h2 id="9-netcdf-loading-details">9. NetCDF loading details</h2>
+<h3 id="time-decoding">Time decoding</h3>
+<p>A triple-fallback strategy handles difficult files:</p>
+<ol>
+<li><strong>Standard xarray</strong> <code>decode_times=True</code> — works for most files</li>
+<li><strong>cftime</strong> <code>use_cftime=True</code> — handles proleptic_gregorian and other
+   non-standard calendars</li>
+<li><strong>Manual decode</strong> via <code>netCDF4.num2date</code> — handles masked fill values in
+   the time coordinate, files with broken <code>_FillValue</code>, etc.</li>
+</ol>
+<p>If all three fail, a sequential integer index replaces the time coordinate
+and a warning is logged.  Use <code>lib/time_fix_helper.py</code> for detailed
+diagnostics.</p>
+<div class="codehilite"><pre><span></span><code><span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;/data/model.nc&#39;</span><span class="p">,</span> <span class="n">decode_times</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>  <span class="c1"># skip decoding</span>
+</code></pre></div>
+
+<h3 id="singleton-dimensions">Singleton dimensions</h3>
+<p>Non-essential dimensions of size 1 are silently squeezed and dropped.
+The most common case is SSS stored with a <code>depth=1</code> dimension:</p>
+<div class="codehilite"><pre><span></span><code># Before loading                      # After loading
+Dimensions: (time, depth, lat, lon)   →   Dimensions: (time, lat, lon)
+            depth=1
+</code></pre></div>
+
+<p><code>lat</code>, <code>lon</code>, and <code>time</code> are never squeezed.  All other size-1 dimensions
+(<code>depth</code>, <code>lev</code>, <code>level</code>, <code>z</code>, <code>s_rho</code>, …) are removed automatically.</p>
+<hr />
+<h2 id="10-cloud-storage">10. Cloud storage</h2>
+<p>All cloud paths are routed through xarray's Zarr backend.</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Amazon S3 — public bucket</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;s3://bucket/ocean.zarr&#39;</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;anon&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">})</span>
+
+<span class="c1"># Amazon S3 — private bucket</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;s3://bucket/ocean.zarr&#39;</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="p">{</span>
+    <span class="s1">&#39;key&#39;</span><span class="p">:</span> <span class="s1">&#39;ACCESS_KEY&#39;</span><span class="p">,</span> <span class="s1">&#39;secret&#39;</span><span class="p">:</span> <span class="s1">&#39;SECRET_KEY&#39;</span><span class="p">,</span>
+<span class="p">})</span>
+
+<span class="c1"># Google Cloud Storage — public</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;gs://bucket/ocean.zarr&#39;</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;token&#39;</span><span class="p">:</span> <span class="s1">&#39;anon&#39;</span><span class="p">})</span>
+
+<span class="c1"># Google Cloud Storage — authenticated</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;gs://bucket/ocean.zarr&#39;</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="p">{</span>
+    <span class="s1">&#39;token&#39;</span><span class="p">:</span> <span class="s1">&#39;/path/to/service_account.json&#39;</span><span class="p">,</span>
+<span class="p">})</span>
+
+<span class="c1"># Azure Blob Storage</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;az://container/ocean.zarr&#39;</span><span class="p">,</span> <span class="n">storage_options</span><span class="o">=</span><span class="p">{</span>
+    <span class="s1">&#39;account_name&#39;</span><span class="p">:</span> <span class="s1">&#39;myaccount&#39;</span><span class="p">,</span> <span class="s1">&#39;account_key&#39;</span><span class="p">:</span> <span class="s1">&#39;mykey&#39;</span><span class="p">,</span>
+<span class="p">})</span>
+</code></pre></div>
+
+<hr />
+<h2 id="11-copernicus-marine-cmems">11. Copernicus Marine (CMEMS)</h2>
+<p><code>CopernicusLoader</code> opens Copernicus Marine (CMEMS) datasets via the
+<code>copernicusmarine</code> package.  All data is streamed directly from the remote
+ARCO/Zarr store; nothing is downloaded unless you explicitly save to NetCDF.</p>
+<h3 id="111-installation">11.1 Installation</h3>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>copernicusmarine
+copernicusmarine<span class="w"> </span>login<span class="w">    </span><span class="c1"># stores credentials in ~/.copernicusmarine/</span>
+</code></pre></div>
+
+<h3 id="112-uri-scheme">11.2 URI scheme</h3>
+<div class="codehilite"><pre><span></span><code>copernicus://DATASET_ID
+</code></pre></div>
+
+<p>Example:</p>
+<div class="codehilite"><pre><span></span><code>copernicus://cmems_obs-sst_atl_phy_nrt_l3s_P1D-m
+</code></pre></div>
+
+<h3 id="113-describe-a-dataset">11.3 Describe a dataset</h3>
+<p>Inspect variables, spatial extent, and time range without downloading data.</p>
+<div class="codehilite"><pre><span></span><code>data-loader<span class="w"> </span>--cmems-describe<span class="w"> </span>cmems_obs-sst_atl_phy_nrt_l3s_P1D-m
+
+data-loader<span class="w"> </span>--cmems-describe<span class="w"> </span>cmems_obs-sst_atl_phy_nrt_l3s_P1D-m<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>sst_meta.json
+</code></pre></div>
+
+<p>Output fields:</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Content</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>dataset_id</code></td>
+<td>The dataset identifier</td>
+</tr>
+<tr>
+<td><code>variables</code></td>
+<td>List of variable short names</td>
+</tr>
+<tr>
+<td><code>variable_details</code></td>
+<td><code>units</code>, <code>long_name</code> per variable</td>
+</tr>
+<tr>
+<td><code>dimensions</code></td>
+<td>Dimension sizes</td>
+</tr>
+<tr>
+<td><code>domain</code></td>
+<td><code>lon_min</code>, <code>lat_min</code>, <code>lon_max</code>, <code>lat_max</code></td>
+</tr>
+<tr>
+<td><code>time_range</code></td>
+<td><code>start</code>, <code>end</code>, <code>n_steps</code></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>Two describe strategies:</strong> <code>copernicusmarine.describe()</code> (fast, no data
+transfer) is tried first.  If it fails, a lazy <code>open_dataset()</code> is used
+as fallback and also provides dimension sizes and time range.</p>
+</blockquote>
+<h3 id="114-browse-the-catalogue">11.4 Browse the catalogue</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Full CMEMS catalogue to JSON (~10–20 MB, ~10 s)</span>
+data-loader<span class="w"> </span>--cmems-catalog<span class="w"> </span>--output<span class="w"> </span>cmems_catalog.json
+
+<span class="c1"># Filter by keyword (much faster)</span>
+data-loader<span class="w"> </span>--cmems-catalog<span class="w"> </span>--contains<span class="w"> </span>SST<span class="w"> </span>NRT<span class="w"> </span>Atlantic<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>cmems_sst_nrt_atl.json
+
+<span class="c1"># List all dataset IDs with jq</span>
+data-loader<span class="w"> </span>--cmems-catalog<span class="w"> </span>--contains<span class="w"> </span>SST<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span><span class="p">|</span><span class="w"> </span>jq<span class="w"> </span>-r<span class="w"> </span><span class="s1">&#39;.products[].datasets[].dataset_id&#39;</span>
+</code></pre></div>
+
+<p>Save the catalogue JSON once, then search it offline with <code>jq</code> or Python.</p>
+<h3 id="115-load-data">11.5 Load data</h3>
+<div class="codehilite"><pre><span></span><code>data-loader<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--copernicus<span class="w"> </span>cmems_obs-sst_atl_phy_nrt_l3s_P1D-m<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--variable<span class="w"> </span>sea_surface_temperature<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--domain<span class="w"> </span>-5.<span class="w"> </span><span class="m">15</span>.<span class="w"> </span><span class="m">50</span>.<span class="w"> </span><span class="m">65</span>.<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--time-range<span class="w"> </span><span class="m">2023</span>-01-01<span class="w"> </span><span class="m">2023</span>-01-31<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>sst_jan2023.nc
+</code></pre></div>
+
+<h3 id="116-python-api">11.6 Python API</h3>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.copernicus_loader</span> <span class="kn">import</span> <span class="n">CopernicusLoader</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">CopernicusLoader</span><span class="p">()</span>
+
+<span class="c1"># Describe</span>
+<span class="n">info</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">describe</span><span class="p">(</span><span class="s1">&#39;cmems_obs-sst_atl_phy_nrt_l3s_P1D-m&#39;</span><span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;variables&#39;</span><span class="p">])</span>    <span class="c1"># [&#39;sea_surface_temperature&#39;, …]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;time_range&#39;</span><span class="p">])</span>   <span class="c1"># {&#39;start&#39;: &#39;…&#39;, &#39;end&#39;: &#39;…&#39;, &#39;n_steps&#39;: …}</span>
+
+<span class="c1"># Browse catalogue</span>
+<span class="n">catalog</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">fetch_catalog</span><span class="p">(</span><span class="n">contains</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;SST&#39;</span><span class="p">,</span> <span class="s1">&#39;NRT&#39;</span><span class="p">])</span>
+<span class="k">for</span> <span class="n">product</span> <span class="ow">in</span> <span class="n">catalog</span><span class="p">[</span><span class="s1">&#39;products&#39;</span><span class="p">]:</span>
+    <span class="k">for</span> <span class="n">ds</span> <span class="ow">in</span> <span class="n">product</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="s1">&#39;datasets&#39;</span><span class="p">,</span> <span class="p">[]):</span>
+        <span class="nb">print</span><span class="p">(</span><span class="n">ds</span><span class="p">[</span><span class="s1">&#39;dataset_id&#39;</span><span class="p">])</span>
+
+<span class="c1"># Load</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+    <span class="s1">&#39;cmems_obs-sst_atl_phy_nrt_l3s_P1D-m&#39;</span><span class="p">,</span>
+    <span class="n">variables</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;sea_surface_temperature&#39;</span><span class="p">],</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+    <span class="n">time_range</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;2023-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2023-01-31&#39;</span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>Via <code>DataLoader</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.data_loader</span> <span class="kn">import</span> <span class="n">DataLoader</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">()</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span>
+    <span class="s1">&#39;copernicus://cmems_obs-sst_atl_phy_nrt_l3s_P1D-m&#39;</span><span class="p">,</span>
+    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;sea_surface_temperature&#39;</span><span class="p">,</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+    <span class="n">time_range</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;2023-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2023-01-31&#39;</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="c1"># DataLoader also exposes thin wrappers for convenience:</span>
+<span class="n">info</span>    <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">describe_copernicus_dataset</span><span class="p">(</span><span class="s1">&#39;cmems_obs-sst_atl_phy_nrt_l3s_P1D-m&#39;</span><span class="p">)</span>
+<span class="n">catalog</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">fetch_copernicus_catalog</span><span class="p">(</span><span class="n">contains</span><span class="o">=</span><span class="p">[</span><span class="s1">&#39;SST&#39;</span><span class="p">])</span>
+</code></pre></div>
+
+<h3 id="117-nrt-vs-reanalysis-datasets">11.7 NRT vs reanalysis datasets</h3>
+<p>CMEMS datasets fall into two categories with different time coverage:</p>
+<table>
+<thead>
+<tr>
+<th>Dataset tag</th>
+<th>Type</th>
+<th>Time coverage</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>_nrt_</code>, <code>_mynrt_</code></td>
+<td>Near-real-time</td>
+<td>Rolling window (~1–2 years)</td>
+</tr>
+<tr>
+<td><code>_my_</code>, <code>_rep_</code></td>
+<td>Reanalysis / hindcast</td>
+<td>Fixed multi-decade archive</td>
+</tr>
+</tbody>
+</table>
+<p>Requesting a <code>time_range</code> outside the available window causes a mismatch
+error.  Always check first with <code>--cmems-describe</code>.</p>
+<h3 id="118-tips">11.8 Tips</h3>
+<ul>
+<li><strong>Describe before loading</strong> — verify variable names and available dates.</li>
+<li><strong><code>WARNING: Connection pool is full</code></strong> — benign urllib3 warning from
+  parallel chunk fetching.  Suppress with
+  <code>warnings.filterwarnings('ignore', message='Connection pool is full')</code>,
+  or reduce concurrency by passing larger <code>chunks</code>.</li>
+</ul>
+<hr />
+<h2 id="12-cmip6-pangeo--intake-esm">12. CMIP6 (PANGEO / intake-esm)</h2>
+<p><code>CMIP6Loader</code> opens CMIP6 model output directly from Google Cloud Storage
+via the <a href="https://pangeo-data.github.io/pangeo-cmip6-cloud/">PANGEO intake-esm catalog</a>
+— no manual downloads required.</p>
+<h3 id="121-installation">12.1 Installation</h3>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>intake<span class="w"> </span>intake-esm<span class="w"> </span>gcsfs
+</code></pre></div>
+
+<h3 id="122-uri-scheme">12.2 URI scheme</h3>
+<div class="codehilite"><pre><span></span><code>cmip6://SOURCE_ID/EXPERIMENT_ID/VARIABLE_ID/TABLE_ID/MEMBER_ID[/GRID_LABEL]
+</code></pre></div>
+
+<p>Examples:</p>
+<div class="codehilite"><pre><span></span><code>cmip6://CESM2/historical/tos/Omon/r1i1p1f1
+cmip6://UKESM1-0-LL/ssp585/tos/Omon/r1i1p1f2/gn
+</code></pre></div>
+
+<p><strong><code>table_id</code> quick reference:</strong></p>
+<table>
+<thead>
+<tr>
+<th>table_id</th>
+<th>Frequency</th>
+<th>Realm</th>
+<th>Example variables</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Omon</code></td>
+<td>Monthly</td>
+<td>Ocean</td>
+<td><code>tos</code>, <code>sos</code>, <code>zos</code>, <code>thetao</code>, <code>so</code></td>
+</tr>
+<tr>
+<td><code>Oday</code></td>
+<td>Daily</td>
+<td>Ocean</td>
+<td><code>tos</code></td>
+</tr>
+<tr>
+<td><code>Amon</code></td>
+<td>Monthly</td>
+<td>Atmosphere</td>
+<td><code>tas</code>, <code>pr</code>, <code>ua</code></td>
+</tr>
+<tr>
+<td><code>SImon</code></td>
+<td>Monthly</td>
+<td>Sea ice</td>
+<td><code>siconc</code>, <code>sithick</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>grid_label</code>:</strong> <code>gn</code> (native, most common) or <code>gr</code> (regridded).</p>
+<h3 id="123-describe-available-datasets">12.3 Describe available datasets</h3>
+<p>Dataset discovery (<code>--cmip6-describe</code>/<code>--cmip6-catalog</code> in older versions)
+now queries the <strong>ESGF search index</strong> rather than downloading the PANGEO
+catalog, via <code>--esgf-describe</code>. All filters are optional — each one narrows
+the search:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Show all available members, grids, and experiments for a model + variable</span>
+data-loader<span class="w"> </span>--esgf-describe<span class="w"> </span>--source-id<span class="w"> </span>CESM2<span class="w"> </span>--variable-id<span class="w"> </span>tos
+
+<span class="c1"># Filter further</span>
+data-loader<span class="w"> </span>--esgf-describe<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--source-id<span class="w"> </span>CESM2<span class="w"> </span>--experiment<span class="w"> </span>historical<span class="w"> </span>--variable-id<span class="w"> </span>tos<span class="w"> </span>--table<span class="w"> </span>Omon<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>cesm2_describe.json
+
+<span class="c1"># Use a different ESGF index node (default: LLNL)</span>
+data-loader<span class="w"> </span>--esgf-describe<span class="w"> </span>--source-id<span class="w"> </span>CESM2<span class="w"> </span>--node-url<span class="w"> </span>https://esgf-data.dkrz.de/esg-search
+</code></pre></div>
+
+<p>The result is a dict of <code>n_datasets</code>, <code>source_ids</code>, <code>experiment_ids</code>,
+<code>variable_ids</code>, <code>table_ids</code>, <code>member_ids</code>, <code>grid_labels</code> — saved as JSON
+with <code>--output</code>, or printed.</p>
+<h3 id="124-browse-without-filters">12.4 Browse without filters</h3>
+<p>There is no dedicated "download the whole catalog" flag anymore — ESGF is
+a live search index, not a static catalog file. Omitting every filter still
+works (<code>--esgf-describe</code> with nothing else), but searches the entire CMIP6
+archive, so it is slow and rarely what you want; narrow with at least
+<code>--source-id</code> or <code>--variable-id</code> first.</p>
+<h3 id="125-load-data">12.5 Load data</h3>
+<div class="codehilite"><pre><span></span><code>data-loader<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--cmip6<span class="w"> </span>CESM2/historical/tos/Omon/r1i1p1f1<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--domain<span class="w"> </span>-5.<span class="w"> </span><span class="m">15</span>.<span class="w"> </span><span class="m">50</span>.<span class="w"> </span><span class="m">65</span>.<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--time-range<span class="w"> </span><span class="m">1990</span>-01-01<span class="w"> </span><span class="m">1990</span>-12-31<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>cesm2_tos_1990.nc
+</code></pre></div>
+
+<h3 id="126-python-api">12.6 Python API</h3>
+<p><code>CMIP6Loader</code> (below) talks to the PANGEO intake-esm catalog directly — a
+different backend from <code>--esgf-describe</code>/<code>--cmip6</code> on the CLI, which search
+ESGF (falling back to PANGEO only for <code>--cmip6</code> <em>loads</em>, not for
+<code>--esgf-describe</code>). Use <code>CMIP6Loader</code> directly when you specifically want
+the PANGEO catalog's own <code>describe</code>/<code>fetch_catalog</code>.</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.cmip6_loader</span> <span class="kn">import</span> <span class="n">CMIP6Loader</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">CMIP6Loader</span><span class="p">()</span>
+
+<span class="c1"># Describe</span>
+<span class="n">info</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">describe</span><span class="p">(</span>
+    <span class="n">source_id</span><span class="o">=</span><span class="s1">&#39;UKESM1-0-LL&#39;</span><span class="p">,</span>
+    <span class="n">experiment_id</span><span class="o">=</span><span class="s1">&#39;ssp585&#39;</span><span class="p">,</span>
+    <span class="n">variable_id</span><span class="o">=</span><span class="s1">&#39;tos&#39;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;member_ids&#39;</span><span class="p">])</span>   <span class="c1"># [&#39;r1i1p1f2&#39;, &#39;r2i1p1f2&#39;, …]</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;n_datasets&#39;</span><span class="p">])</span>
+
+<span class="c1"># Browse catalogue</span>
+<span class="n">records</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">fetch_catalog</span><span class="p">()</span>   <span class="c1"># list of dicts, one per store</span>
+
+<span class="c1"># Load</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+    <span class="n">source_id</span><span class="o">=</span><span class="s1">&#39;CESM2&#39;</span><span class="p">,</span>
+    <span class="n">experiment_id</span><span class="o">=</span><span class="s1">&#39;historical&#39;</span><span class="p">,</span>
+    <span class="n">variable_id</span><span class="o">=</span><span class="s1">&#39;tos&#39;</span><span class="p">,</span>
+    <span class="n">table_id</span><span class="o">=</span><span class="s1">&#39;Omon&#39;</span><span class="p">,</span>
+    <span class="n">member_id</span><span class="o">=</span><span class="s1">&#39;r1i1p1f1&#39;</span><span class="p">,</span>
+    <span class="n">grid_label</span><span class="o">=</span><span class="s1">&#39;gn&#39;</span><span class="p">,</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+    <span class="n">time_range</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;1990-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;1999-12-31&#39;</span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>Via <code>DataLoader</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.data_loader</span> <span class="kn">import</span> <span class="n">DataLoader</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">()</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span>
+    <span class="s1">&#39;cmip6://CESM2/historical/tos/Omon/r1i1p1f1&#39;</span><span class="p">,</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+    <span class="n">time_range</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;1990-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;1999-12-31&#39;</span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>Via <code>DataLoader.load_from_config()</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="n">config</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;source&#39;</span><span class="p">:</span> <span class="s1">&#39;cmip6&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;source_id&#39;</span><span class="p">:</span> <span class="s1">&#39;CESM2&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;experiment_id&#39;</span><span class="p">:</span> <span class="s1">&#39;historical&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;variable_id&#39;</span><span class="p">:</span> <span class="s1">&#39;tos&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;table_id&#39;</span><span class="p">:</span> <span class="s1">&#39;Omon&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;member_id&#39;</span><span class="p">:</span> <span class="s1">&#39;r1i1p1f1&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;domain&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+    <span class="s1">&#39;time_range&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;1990-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;1999-12-31&#39;</span><span class="p">],</span>
+<span class="p">}</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="o">.</span><span class="n">load_from_config</span><span class="p">({</span><span class="s1">&#39;observations&#39;</span><span class="p">:</span> <span class="n">config</span><span class="p">})</span>
+</code></pre></div>
+
+<h3 id="127-tips">12.7 Tips</h3>
+<ul>
+<li><strong>Find member IDs first</strong> with <code>--esgf-describe</code> — not every model
+  provides <code>r1i1p1f1</code>.</li>
+<li><strong>Temperature</strong>: <code>tos</code> and <code>thetao</code> are automatically converted from
+  Kelvin to Celsius when the dataset's units attribute is <code>'K'</code>.</li>
+<li><strong>Chunking</strong>: CMIP6 Zarr stores are already chunked; <code>chunks='auto'</code>
+  (the default) lets Dask align boundaries automatically.</li>
+<li><strong>Multiple matches</strong>: if more than one dataset matches your facets, a
+  warning lists all matches and the first is used.  Narrow the search with
+  <code>grid_label</code> or a specific <code>member_id</code>.</li>
+</ul>
+<hr />
+<h2 id="13-isimip-climate-forcing-data">13. ISIMIP climate forcing data</h2>
+<p><code>ISIMIPLoader</code> accesses ISIMIP bias-adjusted atmospheric forcing data —
+the standard input for ocean, hydrological, and impact models under the
+ISIMIP protocol.</p>
+<h3 id="131-installation">13.1 Installation</h3>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>isimip-client<span class="w">   </span><span class="c1"># enables server-side cutout — strongly recommended</span>
+</code></pre></div>
+
+<p><code>isimip-client</code> is optional; <code>requests</code> (fallback) is usually already present.
+No login is required for most datasets (CC0 open access).</p>
+<h3 id="132-simulation-rounds-and-variables">13.2 Simulation rounds and variables</h3>
+<table>
+<thead>
+<tr>
+<th>Round</th>
+<th>Type</th>
+<th>Forcings</th>
+<th>Period</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ISIMIP3a</td>
+<td>Observed climate</td>
+<td>W5E5, GSWP3-W5E5</td>
+<td>1901–2019</td>
+</tr>
+<tr>
+<td>ISIMIP3b</td>
+<td>GCM projections</td>
+<td>MRI-ESM2-0, UKESM1-0-LL, GFDL-ESM4, IPSL-CM6A-LR, MPI-ESM1-2-HR</td>
+<td>historical + SSP1-2.6 / SSP3-7.0 / SSP5-8.5</td>
+</tr>
+<tr>
+<td>ISIMIP2a</td>
+<td>Observed climate</td>
+<td>WATCH, WFDEI, Princeton, …</td>
+<td>1901–2010</td>
+</tr>
+<tr>
+<td>ISIMIP2b</td>
+<td>GCM projections</td>
+<td>various</td>
+<td>historical + RCP2.6 / RCP6.0</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Key atmospheric variables:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Long name</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tas</code></td>
+<td>Near-surface air temperature (auto-converted K → °C)</td>
+</tr>
+<tr>
+<td><code>pr</code></td>
+<td>Precipitation flux (kg m⁻² s⁻¹)</td>
+</tr>
+<tr>
+<td><code>rsds</code></td>
+<td>Surface downwelling shortwave radiation</td>
+</tr>
+<tr>
+<td><code>rlds</code></td>
+<td>Surface downwelling longwave radiation</td>
+</tr>
+<tr>
+<td><code>hurs</code></td>
+<td>Near-surface relative humidity</td>
+</tr>
+<tr>
+<td><code>uas</code></td>
+<td>Eastward near-surface wind</td>
+</tr>
+<tr>
+<td><code>vas</code></td>
+<td>Northward near-surface wind</td>
+</tr>
+<tr>
+<td><code>ps</code></td>
+<td>Surface air pressure</td>
+</tr>
+</tbody>
+</table>
+<p>Files are global 0.5° resolution, daily, chunked by decade (~860 MB per
+variable per decade for <code>tas</code>).</p>
+<h3 id="133-uri-scheme">13.3 URI scheme</h3>
+<div class="codehilite"><pre><span></span><code>isimip://SIMULATION_ROUND/CLIMATE_FORCING/CLIMATE_SCENARIO/VARIABLE
+</code></pre></div>
+
+<p>Examples:</p>
+<div class="codehilite"><pre><span></span><code>isimip://ISIMIP3b/MRI-ESM2-0/ssp585/tas
+isimip://ISIMIP3a/GSWP3-W5E5/obsclim/pr
+isimip://ISIMIP3b/UKESM1-0-LL/ssp370/rsds
+</code></pre></div>
+
+<h3 id="134-describe-available-files">13.4 Describe available files</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># List all ISIMIP3b files for a given model</span>
+data-loader<span class="w"> </span>--isimip-describe<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--simulation-round<span class="w"> </span>ISIMIP3b<span class="w"> </span>--climate-forcing<span class="w"> </span>MRI-ESM2-0
+
+<span class="c1"># Filter by scenario and variable, save to JSON</span>
+data-loader<span class="w"> </span>--isimip-describe<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--simulation-round<span class="w"> </span>ISIMIP3b<span class="w"> </span>--climate-forcing<span class="w"> </span>MRI-ESM2-0<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--climate-scenario<span class="w"> </span>ssp585<span class="w"> </span>--variable-id<span class="w"> </span>tas<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>mri_ssp585_tas.json
+</code></pre></div>
+
+<p>Output fields: <code>n_files</code>, <code>simulation_rounds</code>, <code>climate_forcings</code>,
+<code>climate_scenarios</code>, <code>climate_variables</code>, <code>year_range</code>, <code>files</code> (first 20).</p>
+<h3 id="135-load-data">13.5 Load data</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Load a 2060s decade for the North Sea region</span>
+data-loader<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--isimip<span class="w"> </span>ISIMIP3b/MRI-ESM2-0/ssp585/tas<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--domain<span class="w"> </span>-5.<span class="w"> </span><span class="m">15</span>.<span class="w"> </span><span class="m">50</span>.<span class="w"> </span><span class="m">65</span>.<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--time-range<span class="w"> </span><span class="m">2060</span>-01-01<span class="w"> </span><span class="m">2069</span>-12-31<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>tas_mri_ssp585_2060s_ns.nc
+
+<span class="c1"># Load observed-climate reference for bias correction calibration</span>
+data-loader<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--isimip<span class="w"> </span>ISIMIP3a/GSWP3-W5E5/obsclim/tas<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--domain<span class="w"> </span>-5.<span class="w"> </span><span class="m">15</span>.<span class="w"> </span><span class="m">50</span>.<span class="w"> </span><span class="m">65</span>.<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--time-range<span class="w"> </span><span class="m">1991</span>-01-01<span class="w"> </span><span class="m">2010</span>-12-31<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>tas_w5e5_1991_2010_ns.nc
+</code></pre></div>
+
+<p>When <code>isimip-client</code> is installed and <code>--domain</code> is given, the loader uses
+the ISIMIP <strong>cutout service</strong> to subset the data server-side before download
+— a global daily file is ~860 MB per decade; a North Sea cutout is a few MB.</p>
+<h3 id="136-python-api">13.6 Python API</h3>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.isimip_loader</span> <span class="kn">import</span> <span class="n">ISIMIPLoader</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">ISIMIPLoader</span><span class="p">(</span><span class="n">cache_dir</span><span class="o">=</span><span class="s1">&#39;/data/cache/isimip&#39;</span><span class="p">)</span>
+
+<span class="c1"># Describe</span>
+<span class="n">info</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">describe</span><span class="p">(</span>
+    <span class="n">simulation_round</span><span class="o">=</span><span class="s1">&#39;ISIMIP3b&#39;</span><span class="p">,</span>
+    <span class="n">climate_forcing</span><span class="o">=</span><span class="s1">&#39;MRI-ESM2-0&#39;</span><span class="p">,</span>
+    <span class="n">climate_scenario</span><span class="o">=</span><span class="s1">&#39;ssp585&#39;</span><span class="p">,</span>
+    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;tas&#39;</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;n_files&#39;</span><span class="p">])</span>      <span class="c1"># number of matching files</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;year_range&#39;</span><span class="p">])</span>   <span class="c1"># (2015, 2100)</span>
+<span class="nb">print</span><span class="p">(</span><span class="n">info</span><span class="p">[</span><span class="s1">&#39;files&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">])</span>     <span class="c1"># first record: name, size_gb, file_url, specifiers</span>
+
+<span class="c1"># Browse catalogue (raw file records)</span>
+<span class="n">records</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">fetch_catalog</span><span class="p">(</span>
+    <span class="n">simulation_round</span><span class="o">=</span><span class="s1">&#39;ISIMIP3b&#39;</span><span class="p">,</span>
+    <span class="n">climate_forcing</span><span class="o">=</span><span class="s1">&#39;MRI-ESM2-0&#39;</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Load</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+    <span class="n">simulation_round</span><span class="o">=</span><span class="s1">&#39;ISIMIP3b&#39;</span><span class="p">,</span>
+    <span class="n">climate_forcing</span><span class="o">=</span><span class="s1">&#39;MRI-ESM2-0&#39;</span><span class="p">,</span>
+    <span class="n">climate_scenario</span><span class="o">=</span><span class="s1">&#39;ssp585&#39;</span><span class="p">,</span>
+    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;tas&#39;</span><span class="p">,</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+    <span class="n">time_range</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;2060-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2069-12-31&#39;</span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>Via <code>DataLoader</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.data_loader</span> <span class="kn">import</span> <span class="n">DataLoader</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">(</span><span class="n">cache_dir</span><span class="o">=</span><span class="s1">&#39;/data/cache/isimip&#39;</span><span class="p">)</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span>
+    <span class="s1">&#39;isimip://ISIMIP3b/MRI-ESM2-0/ssp585/tas&#39;</span><span class="p">,</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+    <span class="n">time_range</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;2060-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2069-12-31&#39;</span><span class="p">),</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>Via <code>DataLoader.load_from_config()</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="n">config</span> <span class="o">=</span> <span class="p">{</span>
+    <span class="s1">&#39;source&#39;</span><span class="p">:</span> <span class="s1">&#39;isimip&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;simulation_round&#39;</span><span class="p">:</span> <span class="s1">&#39;ISIMIP3b&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;climate_forcing&#39;</span><span class="p">:</span> <span class="s1">&#39;MRI-ESM2-0&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;climate_scenario&#39;</span><span class="p">:</span> <span class="s1">&#39;ssp585&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;variable&#39;</span><span class="p">:</span> <span class="s1">&#39;tas&#39;</span><span class="p">,</span>
+    <span class="s1">&#39;domain&#39;</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+    <span class="s1">&#39;time_range&#39;</span><span class="p">:</span> <span class="p">[</span><span class="s1">&#39;2060-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2099-12-31&#39;</span><span class="p">],</span>
+<span class="p">}</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="o">.</span><span class="n">load_from_config</span><span class="p">({</span><span class="s1">&#39;observations&#39;</span><span class="p">:</span> <span class="n">config</span><span class="p">})</span>
+</code></pre></div>
+
+<h3 id="137-cutout-service">13.7 Cutout service</h3>
+<p>When <code>cutout=True</code> (default) and <code>isimip-client</code> is installed, loading with
+a domain follows this sequence:</p>
+<ol>
+<li>Files matching the query are found via the ISIMIP REST API.</li>
+<li>A bounding-box cutout job is submitted to <code>https://files.isimip.org/api/v2/</code>.</li>
+<li>The loader polls every 4 seconds until the job is done.</li>
+<li>The resulting NetCDF is downloaded to <code>cache_dir</code> (if set) and reused on
+   subsequent calls.</li>
+</ol>
+<p>When <code>cutout=False</code> or <code>isimip-client</code> is not installed, full decade files
+are downloaded to <code>cache_dir</code> and domain subsetting is applied locally.</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Force full download (e.g. when cutout service is slow)</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="o">...</span><span class="p">,</span> <span class="n">cutout</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</code></pre></div>
+
+<h3 id="138-tips">13.8 Tips</h3>
+<ul>
+<li><strong>Forcing names are case-sensitive</strong>: use <code>W5E5</code>, <code>GSWP3-W5E5</code>,
+  <code>MRI-ESM2-0</code> exactly.  Use <code>--isimip-describe</code> to see what's available.</li>
+<li><strong>Temperature</strong>: <code>tas</code> is automatically converted from Kelvin to °C.</li>
+<li><strong>Multi-decade loads</strong>: pass the full time range — the loader automatically
+  identifies and concatenates all relevant decade files.</li>
+<li><strong>Bias correction</strong>: see <code>python/bias_correct_forcings.py</code> and
+  <code>config/bc_correct_example.yaml</code> for correcting ISIMIP3b projections
+  against ERA5 / W5E5 observations.</li>
+</ul>
+<hr />
+<h2 id="14-csv--tsv-data">14. CSV / TSV data</h2>
+<p><code>CSVLoader</code> loads tabular observation data — station time series, along-track
+satellite files, pre-processed validation tables — into <code>xr.Dataset</code> with
+<code>time</code> as the primary dimension.  <code>DataLoader.load_data()</code> routes to it
+automatically for <code>.csv</code>, <code>.tsv</code>, and <code>.txt</code> extensions.</p>
+<h3 id="141-installation">14.1 Installation</h3>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>pandas<span class="w">   </span><span class="c1"># usually already present in the conda environment</span>
+</code></pre></div>
+
+<h3 id="142-column-detection">14.2 Column detection</h3>
+<p>The loader searches column names case-insensitively:</p>
+<table>
+<thead>
+<tr>
+<th>Coordinate</th>
+<th>Recognised names (priority order)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>time</td>
+<td><code>time</code>, <code>date</code>, <code>datetime</code>, <code>timestamp</code>, <code>t</code></td>
+</tr>
+<tr>
+<td>latitude</td>
+<td><code>lat</code>, <code>latitude</code>, <code>latt</code>, <code>nav_lat</code>, <code>ylat</code></td>
+</tr>
+<tr>
+<td>longitude</td>
+<td><code>lon</code>, <code>longitude</code>, <code>lont</code>, <code>nav_lon</code>, <code>xlon</code></td>
+</tr>
+</tbody>
+</table>
+<p>Delimiter is auto-detected (tab for <code>.tsv</code> or lines containing <code>\t</code>;
+semicolon for lines containing <code>;</code>; otherwise comma).</p>
+<p>Pass explicit names to the constructor to override detection:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.csv_loader</span> <span class="kn">import</span> <span class="n">CSVLoader</span>
+<span class="n">loader</span> <span class="o">=</span> <span class="n">CSVLoader</span><span class="p">(</span><span class="n">time_col</span><span class="o">=</span><span class="s1">&#39;obs_time&#39;</span><span class="p">,</span> <span class="n">lat_col</span><span class="o">=</span><span class="s1">&#39;LAT&#39;</span><span class="p">,</span> <span class="n">lon_col</span><span class="o">=</span><span class="s1">&#39;LON&#39;</span><span class="p">)</span>
+</code></pre></div>
+
+<h3 id="143-cli">14.3 CLI</h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Show metadata</span>
+data-loader<span class="w"> </span>/data/obs/station_sst.csv<span class="w"> </span>--info
+
+<span class="c1"># Load with subsetting, save to NetCDF</span>
+data-loader<span class="w"> </span>/data/obs/station_sst.csv<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--variable<span class="w"> </span>sst<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--domain<span class="w"> </span>-5.<span class="w"> </span><span class="m">15</span>.<span class="w"> </span><span class="m">50</span>.<span class="w"> </span><span class="m">65</span>.<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--time-range<span class="w"> </span><span class="m">2022</span>-01-01<span class="w"> </span><span class="m">2022</span>-12-31<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>station_sst_ns_2022.nc
+
+<span class="c1"># Glob: load all years</span>
+data-loader<span class="w"> </span><span class="s1">&#39;/data/obs/ctd_202*.csv&#39;</span><span class="w"> </span>--variable<span class="w"> </span>temp
+</code></pre></div>
+
+<h3 id="144-python-api">14.4 Python API</h3>
+<p>Via <code>DataLoader</code> (automatic routing):</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.data_loader</span> <span class="kn">import</span> <span class="n">DataLoader</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">()</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;/data/obs/station_sst.csv&#39;</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;sst&#39;</span><span class="p">)</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;/data/obs/ctd_202*.csv&#39;</span><span class="p">)</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span>
+    <span class="s1">&#39;/data/obs/along_track.csv&#39;</span><span class="p">,</span>
+    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;sst&#39;</span><span class="p">,</span>
+    <span class="n">time_range</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;2022-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2022-12-31&#39;</span><span class="p">),</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<p>Direct use of <code>CSVLoader</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.csv_loader</span> <span class="kn">import</span> <span class="n">CSVLoader</span>
+
+<span class="n">ds</span> <span class="o">=</span> <span class="n">CSVLoader</span><span class="p">()</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="s1">&#39;/data/obs/station_sst.csv&#39;</span><span class="p">)</span>
+
+<span class="n">ds</span> <span class="o">=</span> <span class="n">CSVLoader</span><span class="p">(</span><span class="n">time_col</span><span class="o">=</span><span class="s1">&#39;obs_time&#39;</span><span class="p">,</span> <span class="n">lat_col</span><span class="o">=</span><span class="s1">&#39;LAT&#39;</span><span class="p">,</span> <span class="n">lon_col</span><span class="o">=</span><span class="s1">&#39;LON&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">load</span><span class="p">(</span>
+    <span class="s1">&#39;/data/obs/station_sst.csv&#39;</span><span class="p">,</span> <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;sst&#39;</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s1">&#39;;&#39;</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<h3 id="145-output-structure">14.5 Output structure</h3>
+<div class="codehilite"><pre><span></span><code><span class="nb">print</span><span class="p">(</span><span class="n">ds</span><span class="p">)</span>
+<span class="c1"># &lt;xarray.Dataset&gt;</span>
+<span class="c1"># Dimensions:  (time: 365)</span>
+<span class="c1"># Coordinates:</span>
+<span class="c1">#   * time  (time) datetime64[ns] 2022-01-01 … 2022-12-31</span>
+<span class="c1">#     lat   (time) float64 …     # per-row if lat column present</span>
+<span class="c1">#     lon   (time) float64 …</span>
+<span class="c1"># Data variables:</span>
+<span class="c1">#     sst   (time) float64 …</span>
+</code></pre></div>
+
+<blockquote>
+<p>CSV files hold 1-D per-row data.  To regrid to a 2-D grid, use
+<code>lib/regridding.py</code> after loading.</p>
+</blockquote>
+<hr />
+<h2 id="15-troubleshooting">15. Troubleshooting</h2>
+<p><strong><code>copernicusmarine</code> not found</strong></p>
+<div class="codehilite"><pre><span></span><code>RuntimeError: copernicusmarine package is required …
+</code></pre></div>
+
+<p>Install: <code>pip install copernicusmarine</code> then <code>copernicusmarine login</code>.</p>
+<p><strong>CMEMS time range mismatch / empty result</strong></p>
+<p>The requested dates fall outside the dataset's available window.  Use
+<code>--cmems-describe</code> to inspect available dates, or switch to a reanalysis
+dataset (see <a href="#117-nrt-vs-reanalysis-datasets">NRT vs reanalysis</a>).</p>
+<p><strong><code>WARNING: Connection pool is full</code> (CMEMS)</strong></p>
+<p>Benign urllib3 warning from parallel chunk fetching.  Suppress with:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">import</span> <span class="nn">warnings</span>
+<span class="n">warnings</span><span class="o">.</span><span class="n">filterwarnings</span><span class="p">(</span><span class="s1">&#39;ignore&#39;</span><span class="p">,</span> <span class="n">message</span><span class="o">=</span><span class="s1">&#39;Connection pool is full&#39;</span><span class="p">)</span>
+</code></pre></div>
+
+<p>Or pass larger <code>chunks</code> to reduce concurrency.</p>
+<p><strong><code>intake</code>/<code>intake-esm</code> not found (CMIP6)</strong></p>
+<div class="codehilite"><pre><span></span><code>RuntimeError: intake and/or intake-esm are not installed …
+</code></pre></div>
+
+<p>Install: <code>pip install intake intake-esm gcsfs</code>.</p>
+<p><strong>CMIP6: no datasets found</strong></p>
+<p>Check spelling with <code>--esgf-describe</code>.  If multiple members exist but
+<code>r1i1p1f1</code> is missing, use <code>describe()</code> to list available <code>member_ids</code>.</p>
+<p><strong>ISIMIP: no files found</strong></p>
+<div class="codehilite"><pre><span></span><code>RuntimeError: No ISIMIP files found for ISIMIP3b/mri-esm2-0/ssp585/tas.
+</code></pre></div>
+
+<p>Forcing names are case-sensitive.  Use <code>--isimip-describe</code> to see exact
+spelling.  Common names: <code>W5E5</code>, <code>GSWP3-W5E5</code>, <code>MRI-ESM2-0</code>, <code>UKESM1-0-LL</code>,
+<code>GFDL-ESM4</code>, <code>IPSL-CM6A-LR</code>, <code>MPI-ESM1-2-HR</code>.</p>
+<p><strong>ISIMIP: cutout job did not complete</strong></p>
+<div class="codehilite"><pre><span></span><code>RuntimeError: ISIMIP cutout job did not complete (status=&#39;started&#39;).
+</code></pre></div>
+
+<p>The cutout service is occasionally slow for large requests.  Pass
+<code>cutout=False</code> to fall back to full download + local subset.</p>
+<p><strong>ISIMIP: <code>isimip-client</code> not installed</strong></p>
+<p>The <code>requests</code> fallback is used automatically, but the cutout service is
+unavailable — full global files (~860 MB each) are downloaded instead.
+Install <code>isimip-client</code> to enable server-side subsetting.</p>
+<p><strong>Coordinate not found / subsetting skipped</strong></p>
+<p>The file uses an unusual coordinate name.  Add it to
+<code>config/name_mappings.yaml</code> under the appropriate alias list.  Check what
+the file contains:</p>
+<div class="codehilite"><pre><span></span><code>data-loader<span class="w"> </span>/data/model.nc<span class="w"> </span>--info
+</code></pre></div>
+
+<p><strong>Time axis replaced with integer index</strong></p>
+<p>The original time coordinate had masked or invalid values.  A warning is
+logged.  Use <code>lib/time_fix_helper.py</code> for detailed diagnostics.</p>
+<p><strong>Zarr <code>consolidated</code> metadata error</strong></p>
+<div class="codehilite"><pre><span></span><code><span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;path/to/store.zarr&#39;</span><span class="p">,</span> <span class="n">consolidated</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+</code></pre></div></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

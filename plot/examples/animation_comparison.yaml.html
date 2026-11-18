@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>examples/animation_comparison.yaml · ocean-* documentation</title>
+<meta name="description" content="Example file from ocean-plot">
+<link rel="icon" href="../../assets/logo_stacked.png">
+<link rel="stylesheet" href="../../assets/style.css"><link rel="stylesheet" href="../../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../../index.html"><img src="../../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../../index.html">Overview</a><a href="../../install.html">Installation</a><a href="../../data/index.html">ocean-data</a><a href="../../prep/index.html">ocean-prep</a><a href="../../post/index.html">ocean-post</a><a href="../index.html" aria-current="page">ocean-plot</a><a href="../../common/index.html">ocean-common</a><a href="../../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="../index.html">ocean-plot</a> · example</div><h1>examples/animation_comparison.yaml</h1><p>Example file from ocean-plot</p></div></section>
+<main><div class="layout single"><article class="doc"><div class="codehilite"><pre><span></span><code><span class="c1"># ── animation_comparison.yaml ─────────────────────────────────────────────────</span>
+<span class="c1"># Two-panel side-by-side map animation — e.g. model vs satellite observations.</span>
+<span class="c1"># A horizontal colorbar sits between the maps and the optional time-series</span>
+<span class="c1"># panels.  Use colorbar: shared (default) or individual per panel.</span>
+<span class="c1">#</span>
+<span class="c1"># Usage:</span>
+<span class="c1">#   ocean-animations --config examples/animation_comparison.yaml</span>
+<span class="c1"># ──────────────────────────────────────────────────────────────────────────────</span>
+
+<span class="nt">plottype</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">comparison</span>
+
+<span class="c1"># ── Left panel (typically model) ──────────────────────────────────────────────</span>
+<span class="nt">left</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/kb/NS/Baseline/ns_daily_surface.nc</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">temp</span>
+<span class="w">    </span><span class="nt">time_slice</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">      </span><span class="nt">end</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">365</span>
+<span class="w">  </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pyGETM</span><span class="nv"> </span><span class="s">SST&quot;</span>
+<span class="w">  </span><span class="c1"># vmin:        # override shared vmin for this panel only</span>
+<span class="w">  </span><span class="c1"># vmax:</span>
+<span class="w">  </span><span class="c1"># colormap:    # per-panel colormap (overrides top-level colormap)</span>
+<span class="w">  </span><span class="c1"># offset:      # additive transform applied after loading: value = value * factor + offset</span>
+<span class="w">  </span><span class="c1"># factor:      # multiplicative transform (default 1.0)</span>
+
+<span class="c1"># ── Right panel (typically observations) ──────────────────────────────────────</span>
+<span class="nt">right</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/CMEMS/sst/cmems_sst_daily_2019.nc</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">analysed_sst</span>
+<span class="w">    </span><span class="nt">time_slice</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">      </span><span class="nt">end</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">365</span>
+<span class="w">  </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;CMEMS</span><span class="nv"> </span><span class="s">SST</span><span class="nv"> </span><span class="s">(satellite)&quot;</span>
+<span class="w">  </span><span class="c1"># offset: -273.15   # example: convert K → °C for CCI/CMEMS SST products</span>
+
+<span class="c1"># ── Spatial subset (applied to both panels) ───────────────────────────────────</span>
+<span class="nt">subset</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">62</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-5</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sst_model_vs_obs_2019.mp4</span>
+<span class="w">  </span><span class="nt">fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+
+<span class="c1"># title: &quot;North Sea SST — Model vs Satellite 2019&quot;</span>
+<span class="c1"># Omit to auto-derive: &quot;&lt;left.title&gt; / &lt;right.title&gt;&quot;</span>
+
+<span class="c1"># ── Colour scale ──────────────────────────────────────────────────────────────</span>
+<span class="nt">colormap</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">thermal</span>
+<span class="nt">vmin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4.0</span>
+<span class="nt">vmax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">22.0</span>
+
+<span class="c1"># colorbar: shared       # &#39;shared&#39; (default) — one colorbar for both panels</span>
+<span class="c1"># colorbar: individual   # separate colorbar per panel; range set per panel</span>
+<span class="c1">#                        # (use left.vmin/vmax and right.vmin/vmax, or auto)</span>
+<span class="c1">#</span>
+<span class="c1"># The colour range is always computed from the animated time window only,</span>
+<span class="c1"># not the full dataset, so a time_slice doesn&#39;t skew the auto-range.</span>
+
+<span class="c1"># ── Time synchronisation ──────────────────────────────────────────────────────</span>
+<span class="c1"># &#39;index&#39;    — advance both panels by the same frame index (default).</span>
+<span class="c1">#              Requires equal-length time axes.</span>
+<span class="c1"># &#39;calendar&#39; — for each left frame, find the nearest right frame by date.</span>
+<span class="c1">#              Use this when model and obs have different time resolutions</span>
+<span class="c1">#              (e.g. daily model vs 4-day satellite composites).</span>
+<span class="nt">time_sync</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">index</span>
+
+<span class="c1"># ── Optional time series panels ───────────────────────────────────────────────</span>
+<span class="c1"># Adds subplot rows below both maps.  Each panel shows BOTH datasets:</span>
+<span class="c1"># a solid line for the left (model) and a dashed line for the right (obs).</span>
+<span class="c1"># A thin background trace shows the full animated window; a growing coloured</span>
+<span class="c1"># line advances with the animation.</span>
+<span class="c1">#</span>
+<span class="c1"># timeseries:</span>
+<span class="c1">#   - label: &quot;Central North Sea&quot;</span>
+<span class="c1">#     lat: 57.0</span>
+<span class="c1">#     lon:  2.0</span>
+<span class="c1">#     color: white</span>
+<span class="c1">#     # obs:                    # optional in-situ overlay (buoy / station)</span>
+<span class="c1">#     #   file: buoy_nns.csv    # CSV, TXT, or NetCDF</span>
+<span class="c1">#     #   time_col: 0           # column index or name (CSV/TXT)</span>
+<span class="c1">#     #   value_col: 1</span>
+<span class="c1">#     #   # variable: temp      # NetCDF variable (NetCDF only)</span>
+<span class="c1">#     #   label: &quot;Buoy&quot;</span>
+<span class="c1">#     #   color: white</span>
+<span class="c1">#     #   marker: &quot;x&quot;</span>
+<span class="c1">#   - label: &quot;English Channel&quot;</span>
+<span class="c1">#     lat: 51.0</span>
+<span class="c1">#     lon:  1.5</span>
+<span class="c1">#     color: yellow</span>
+
+<span class="c1"># ── Optional annotations ──────────────────────────────────────────────────────</span>
+<span class="c1"># Overlay static or time-gated geographic annotations on the map.</span>
+<span class="c1"># Remove the leading &#39;#&#39; from any block to activate it.</span>
+<span class="c1">#</span>
+<span class="c1"># annotations:</span>
+<span class="c1">#</span>
+<span class="c1">#   # ── text label ────────────────────────────────────────────────────────────</span>
+<span class="c1">#   - type: text</span>
+<span class="c1">#     lat: 57.0</span>
+<span class="c1">#     lon: 4.0</span>
+<span class="c1">#     text: &quot;North Sea&quot;</span>
+<span class="c1">#     fontsize: 11          # default 10</span>
+<span class="c1">#     color: white          # default white</span>
+<span class="c1">#     ha: center            # left/center/right, default left</span>
+<span class="c1">#     va: bottom            # top/center/bottom, default bottom</span>
+<span class="c1">#     fontweight: normal    # normal/bold, default normal</span>
+<span class="c1">#     bbox:                 # optional background box (remove key to omit)</span>
+<span class="c1">#       facecolor: black</span>
+<span class="c1">#       alpha: 0.5</span>
+<span class="c1">#       pad: 2</span>
+<span class="c1">#     # time_on: 0          # frame index or ISO date string; omit = always on</span>
+<span class="c1">#     # time_off: 100       # omit = stays on once activated</span>
+<span class="c1">#</span>
+<span class="c1">#   # ── marker (with optional text label) ────────────────────────────────────</span>
+<span class="c1">#   - type: point</span>
+<span class="c1">#     lat: 54.5</span>
+<span class="c1">#     lon: 6.0</span>
+<span class="c1">#     marker: &quot;*&quot;           # default &quot;o&quot;</span>
+<span class="c1">#     markersize: 10        # default 8</span>
+<span class="c1">#     color: red</span>
+<span class="c1">#     label: &quot;Station A&quot;   # optional; creates a second text artist</span>
+<span class="c1">#     # time_on: 30</span>
+<span class="c1">#</span>
+<span class="c1">#   # ── rectangle outline (optionally filled) ────────────────────────────────</span>
+<span class="c1">#   - type: box</span>
+<span class="c1">#     lat_min: 54.0</span>
+<span class="c1">#     lat_max: 58.0</span>
+<span class="c1">#     lon_min: 3.0</span>
+<span class="c1">#     lon_max: 7.0</span>
+<span class="c1">#     color: yellow</span>
+<span class="c1">#     linewidth: 1.5        # default 1.0</span>
+<span class="c1">#     alpha: 0.8            # default 1.0</span>
+<span class="c1">#     fill: false           # true = semi-transparent fill, default false</span>
+<span class="c1">#     label: &quot;&quot;             # optional text at top-left corner</span>
+<span class="c1">#     # time_on: 50</span>
+<span class="c1">#</span>
+<span class="c1">#   # ── polyline through [lat, lon] waypoints ─────────────────────────────────</span>
+<span class="c1">#   - type: line</span>
+<span class="c1">#     points:</span>
+<span class="c1">#       - [55.0, -2.0]</span>
+<span class="c1">#       - [55.0,  8.0]</span>
+<span class="c1">#     color: cyan</span>
+<span class="c1">#     linewidth: 1.0</span>
+<span class="c1">#     linestyle: &quot;--&quot;       # default &quot;-&quot;</span>
+<span class="c1">#     label: &quot;Section A&quot;   # optional; placed at midpoint</span>
+<span class="c1">#     # time_on: 0</span>
+<span class="c1">#</span>
+<span class="c1">#   # ── directed arrow ────────────────────────────────────────────────────────</span>
+<span class="c1">#   - type: arrow</span>
+<span class="c1">#     from_lat: 55.0</span>
+<span class="c1">#     from_lon: 2.0</span>
+<span class="c1">#     to_lat: 57.0</span>
+<span class="c1">#     to_lon: 4.0</span>
+<span class="c1">#     color: white</span>
+<span class="c1">#     linewidth: 1.5</span>
+<span class="c1">#     label: &quot;&quot;             # optional; placed at midpoint</span>
+<span class="c1">#     # time_on: 0</span>
+
+<span class="c1"># ── matplotlib style ──────────────────────────────────────────────────────────</span>
+<span class="c1"># matplotlib loads its own config hierarchy automatically (matplotlibrc in CWD,</span>
+<span class="c1"># ~/.config/matplotlib/matplotlibrc, system defaults).  Use &#39;style&#39; to select</span>
+<span class="c1"># a named style or .mplstyle file for this run:</span>
+<span class="c1"># style: seaborn-v0_8-paper</span>
+</code></pre></div></article></div></main>
+<footer class="foot"><div class="footin"><img src="../../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

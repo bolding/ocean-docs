@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Initial Conditions Guide · ocean-* documentation</title>
+<meta name="description" content="Initial Conditions Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="index.html" aria-current="page">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-prep</a></div><h1>Initial Conditions Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-prep</h2><ul><li><a href="index.html">Overview</a></li><li><a href="model-setup.html">Model Setup Guide</a></li><li><a href="bathymetry.html">Bathymetry Guide</a></li><li><a href="boundaries-cmems.html">CMEMS Boundary Conditions Guide</a></li><li><a href="boundaries-cmip6.html">CMIP6 Boundary Conditions Guide</a></li><li><a href="tidal-boundaries.html">Tidal + CMIP6 mean boundary conditions</a></li><li><a href="delta-change-boundaries.html">Delta-change boundary conditions</a></li><li><a href="boundary-diagnostics.html">Boundary Diagnostics Guide</a></li><li><a href="initial-conditions.html" aria-current="page">Initial Conditions Guide</a></li><li><a href="radiation-bc.html">Radiation Bias Correction Guide</a></li><li><a href="humidity-bc.html">Humidity Bias Correction Guide</a></li><li><a href="bias-correction-guide.html">Bias Correction of Atmospheric Forcings — User &amp; Technical Guide</a></li></ul></aside><article class="doc"><h1 id="initial-conditions-guide">Initial Conditions Guide</h1>
+<h2 id="overview">Overview</h2>
+<p>Downloads temperature and salinity from CMEMS and saves 12 monthly snapshots (1st of each month) on the source model's native grid, clipped to the model domain bounding box.</p>
+<p>Requires the <code>[cmems]</code> extra:</p>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[cmems]&quot;</span>
+copernicusmarine<span class="w"> </span>login
+</code></pre></div>
+
+<hr />
+<h2 id="config-structure">Config structure</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># config/mymodel_init_create.yaml</span>
+
+<span class="nt">setup</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">mymodel</span>
+
+<span class="nt">domain</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-8.0</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">13.0</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">47.5</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">62.0</span>
+
+<span class="nt">flood_fill</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">    </span><span class="c1"># add {variable}_ff alongside original variable</span>
+
+<span class="nt">processing</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">bbox_buffer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.1</span>
+<span class="w">  </span><span class="nt">download_cache_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;/data/cache/cmems/ic&quot;</span><span class="w">   </span><span class="c1"># null to disable</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">base_directory</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;./init_data/mymodel&quot;</span>
+<span class="w">  </span><span class="nt">filename_template</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{source}_{variable}_{year}_monthly_ic.nc&quot;</span>
+
+<span class="nt">sources</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">AMM7</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">year</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2015</span><span class="w">   </span><span class="c1"># default; override with --year</span>
+<span class="w">    </span><span class="nt">datasets</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">temperature</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">sources</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">dataset_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmems_mod_nws_phy-t_my_7km-3D_P1D-m&quot;</span>
+<span class="w">            </span><span class="nt">priority</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">        </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">thetao</span>
+<span class="w">        </span><span class="nt">depth_range</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">minimum</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+<span class="w">          </span><span class="nt">maximum</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5000.0</span>
+<span class="w">      </span><span class="nt">salinity</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">sources</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">dataset_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmems_mod_nws_phy-s_my_7km-3D_P1D-m&quot;</span>
+<span class="w">            </span><span class="nt">priority</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">        </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">          </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">so</span>
+<span class="w">        </span><span class="nt">depth_range</span><span class="p">:</span>
+<span class="w">          </span><span class="nt">minimum</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.0</span>
+<span class="w">          </span><span class="nt">maximum</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5000.0</span>
+</code></pre></div>
+
+<h3 id="multiple-sources-with-priority">Multiple sources with priority</h3>
+<p>When several <code>sources</code> entries are listed under a dataset, higher <code>priority</code> values fill in where lower-priority data is masked (e.g. a primary NWS product + a Baltic product to fill the Kattegat halo):</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">sources</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">dataset_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmems_mod_nws_phy-t_my_7km-3D_P1D-m&quot;</span><span class="w">   </span><span class="c1"># primary</span>
+<span class="w">    </span><span class="nt">priority</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">dataset_id</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;cmems_mod_bal_phy_my_P1D-m&quot;</span><span class="w">             </span><span class="c1"># fills masked halo</span>
+<span class="w">    </span><span class="nt">priority</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+</code></pre></div>
+
+<hr />
+<h2 id="workflow">Workflow</h2>
+<h3 id="1-check-coverage">1. Check coverage</h3>
+<div class="codehilite"><pre><span></span><code>download-init-conditions<span class="w"> </span>--config<span class="w"> </span>config/mymodel_init_create.yaml<span class="w"> </span>--source<span class="w"> </span>AMM7<span class="w"> </span>--check-coverage
+</code></pre></div>
+
+<p>Checks each dataset's spatial extent against the domain bounding box.</p>
+<h3 id="2-dry-run">2. Dry run</h3>
+<div class="codehilite"><pre><span></span><code>download-init-conditions<span class="w"> </span>--config<span class="w"> </span>config/mymodel_init_create.yaml<span class="w"> </span>--source<span class="w"> </span>AMM7<span class="w"> </span>--dryrun
+</code></pre></div>
+
+<p>Prints resolved source, year, output paths — no download.</p>
+<h3 id="3-download">3. Download</h3>
+<div class="codehilite"><pre><span></span><code>download-init-conditions<span class="w"> </span>--config<span class="w"> </span>config/mymodel_init_create.yaml<span class="w"> </span>--source<span class="w"> </span>AMM7
+download-init-conditions<span class="w"> </span>--config<span class="w"> </span>config/mymodel_init_create.yaml<span class="w"> </span>--source<span class="w"> </span>AMM7<span class="w"> </span>--year<span class="w"> </span><span class="m">2015</span>
+download-init-conditions<span class="w"> </span>--config<span class="w"> </span>config/mymodel_init_create.yaml<span class="w"> </span>--source<span class="w"> </span>AMM15<span class="w"> </span>--year<span class="w"> </span><span class="m">2026</span>
+</code></pre></div>
+
+<table>
+<thead>
+<tr>
+<th>Option</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--source NAME</code></td>
+<td>Source key from the config (e.g. <code>AMM7</code>, <code>AMM15</code>)</td>
+</tr>
+<tr>
+<td><code>--year YEAR</code></td>
+<td>Override the default year in the config</td>
+</tr>
+<tr>
+<td><code>--check-coverage</code></td>
+<td>Coverage check only, no download</td>
+</tr>
+<tr>
+<td><code>--dryrun</code></td>
+<td>Print resolved paths, no download</td>
+</tr>
+</tbody>
+</table>
+<h3 id="output">Output</h3>
+<p>One file per variable:</p>
+<div class="codehilite"><pre><span></span><code>init_data/mymodel/AMM7_temperature_2015_monthly_ic.nc
+init_data/mymodel/AMM7_salinity_2015_monthly_ic.nc
+</code></pre></div>
+
+<p>Each file contains 12 time steps (Jan–Dec, day 1 of each month) plus a flood-filled <code>*_ff</code> variable if <code>flood_fill: true</code>.</p></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

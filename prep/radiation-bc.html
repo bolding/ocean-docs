@@ -1,0 +1,385 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Radiation Bias Correction Guide · ocean-* documentation</title>
+<meta name="description" content="Radiation Bias Correction Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="index.html" aria-current="page">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-prep</a></div><h1>Radiation Bias Correction Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-prep</h2><ul><li><a href="index.html">Overview</a></li><li><a href="model-setup.html">Model Setup Guide</a></li><li><a href="bathymetry.html">Bathymetry Guide</a></li><li><a href="boundaries-cmems.html">CMEMS Boundary Conditions Guide</a></li><li><a href="boundaries-cmip6.html">CMIP6 Boundary Conditions Guide</a></li><li><a href="tidal-boundaries.html">Tidal + CMIP6 mean boundary conditions</a></li><li><a href="delta-change-boundaries.html">Delta-change boundary conditions</a></li><li><a href="boundary-diagnostics.html">Boundary Diagnostics Guide</a></li><li><a href="initial-conditions.html">Initial Conditions Guide</a></li><li><a href="radiation-bc.html" aria-current="page">Radiation Bias Correction Guide</a></li><li><a href="humidity-bc.html">Humidity Bias Correction Guide</a></li><li><a href="bias-correction-guide.html">Bias Correction of Atmospheric Forcings — User &amp; Technical Guide</a></li></ul></aside><article class="doc"><h1 id="radiation-bias-correction-guide">Radiation Bias Correction Guide</h1>
+<h2 id="background-downwelling-vs-net-radiation">Background: downwelling vs net radiation</h2>
+<p>Surface radiation comes in two forms relevant for bias correction:</p>
+<p><strong>Downwelling radiation</strong> is what the atmosphere delivers to the surface —
+shortwave (<code>ssrd</code> / <code>rsds</code>) from the sun and longwave (<code>strd</code> / <code>rlds</code>) from
+greenhouse gases and clouds.</p>
+<p><strong>Net radiation</strong> is what the surface actually exchanges after reflection and
+re-emission.  For shortwave this is <code>ssr = ssrd − reflected SW</code>; for longwave
+<code>str = strd − surface upwelling LW</code>.  Net radiation is the physically relevant
+quantity for the ocean heat balance.</p>
+<table>
+<thead>
+<tr>
+<th>Quantity</th>
+<th>ERA5</th>
+<th>CMIP6</th>
+<th>Formula</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Downwelling SW</td>
+<td><code>ssrd</code> (J m⁻²)</td>
+<td><code>rsds</code> (W m⁻²)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Downwelling LW</td>
+<td><code>strd</code> (J m⁻²)</td>
+<td><code>rlds</code> (W m⁻²)</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Upwelling SW</td>
+<td>—</td>
+<td><code>rsus</code> (W m⁻²)</td>
+<td>surface reflected</td>
+</tr>
+<tr>
+<td>Upwelling LW</td>
+<td>—</td>
+<td><code>rlus</code> (W m⁻²)</td>
+<td>Stefan–Boltzmann emission</td>
+</tr>
+<tr>
+<td><strong>Net SW</strong></td>
+<td><code>ssr</code> (J m⁻²)</td>
+<td><code>rsds − rsus</code> (W m⁻²)</td>
+<td>always ≥ 0</td>
+</tr>
+<tr>
+<td><strong>Net LW</strong></td>
+<td><code>str</code> (J m⁻²)</td>
+<td><code>rlds − rlus</code> (W m⁻²)</td>
+<td>always ≤ 0</td>
+</tr>
+</tbody>
+</table>
+<p>ERA5 and CMIP6 models use different surface albedo and emissivity
+parameterisations.  Correcting only the downwelling component (old approach:
+<code>ssrd → rsds</code>, <code>strd → rlds</code>) leaves the albedo-driven bias in the upwelling
+component uncorrected.  Correcting the net removes this bias because the ERA5
+net already reflects ERA5's observed-constrained surface properties.</p>
+<p>pyGETM accepts net radiation directly (alongside the downwelling-only and
+calculated-flux modes), making this the cleanest choice for future projections.</p>
+<hr />
+<h2 id="cmip6-variable-availability">CMIP6 variable availability</h2>
+<p>Both <code>rsus</code> and <code>rlus</code> are widely published at <strong>daily</strong> frequency in CMIP6
+ScenarioMIP.  ESGF searches (April 2026) confirm:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Experiment</th>
+<th>Models with daily data</th>
+<th>MPI-ESM1-2-HR</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>rsus</code></td>
+<td>historical</td>
+<td>20+</td>
+<td>✓ 21 datasets, 1850–2014</td>
+</tr>
+<tr>
+<td><code>rsus</code></td>
+<td>ssp585</td>
+<td>33 models, 567 datasets</td>
+<td>✓ 3 ensemble members</td>
+</tr>
+<tr>
+<td><code>rsus</code></td>
+<td>ssp245</td>
+<td>31 models</td>
+<td>✓ available</td>
+</tr>
+<tr>
+<td><code>rlus</code></td>
+<td>historical</td>
+<td>20+</td>
+<td>✓ 21 datasets, 1850–2014</td>
+</tr>
+<tr>
+<td><code>rlus</code></td>
+<td>ssp585</td>
+<td>38 models, 618 datasets</td>
+<td>✓ 3 ensemble members</td>
+</tr>
+<tr>
+<td><code>rlus</code></td>
+<td>ssp245</td>
+<td>37 models, 857 datasets</td>
+<td>✓ 5 ensemble members</td>
+</tr>
+</tbody>
+</table>
+<p>Notable exceptions and caveats:</p>
+<ul>
+<li><strong>GFDL-ESM4</strong> publishes <code>rsus</code>/<code>rlus</code> at <strong>3-hourly</strong> frequency only (not
+  daily).  Add <code>resample: daily</code> inside each composite component config block.
+  The <code>_load_composite</code> function applies resampling component-wise before
+  subtracting.</li>
+<li>ESGF queries performed on the ORNL node (via LLNL redirect):
+  <a href="https://esgf-node.llnl.gov/esg-search/search?project=CMIP6&amp;activity_id=ScenarioMIP&amp;variable_id=rsus&amp;experiment_id=ssp585&amp;frequency=day">rsus ssp585</a>
+  · <a href="https://esgf-node.llnl.gov/esg-search/search?project=CMIP6&amp;activity_id=ScenarioMIP&amp;variable_id=rlus&amp;experiment_id=ssp585&amp;frequency=day">rlus ssp585</a>
+  · <a href="https://cmip-publications.llnl.gov/view/CMIP6/?type=variable&amp;option=rsus+-+Surface+Upwelling+Shortwave+Radiation">CMIP6 rsus publication list</a>
+  · <a href="https://cmip-publications.llnl.gov/view/CMIP6/?type=variable&amp;option=rlus+-+Surface+Upwelling+Longwave+Radiation">CMIP6 rlus publication list</a></li>
+</ul>
+<hr />
+<h2 id="sign-conventions-and-correction-kind">Sign conventions and correction kind</h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Typical range</th>
+<th><code>kind</code></th>
+<th>Reason</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>net_sw</code> = <code>rsds − rsus</code></td>
+<td>≥ 0 W m⁻²</td>
+<td><code>*</code> multiplicative</td>
+<td>Ratio of like-signed positives; preserves the QDM trend as a fractional change</td>
+</tr>
+<tr>
+<td><code>net_lw</code> = <code>rlds − rlus</code></td>
+<td>≤ 0 W m⁻²</td>
+<td><code>+</code> additive</td>
+<td>Signed quantity; additive delta is physically more meaningful than a ratio of negatives</td>
+</tr>
+</tbody>
+</table>
+<p>ERA5 <code>str</code> is negative (same sign as <code>rlds − rlus</code>) — no sign flip is needed.
+ERA5 <code>ssr</code> is positive — no sign flip needed.</p>
+<p>Both ERA5 variables are stored as hourly J m⁻² accumulations.  Convert to
+W m⁻² with <code>scale_factor: 0.000277778</code> (= 1 / 3600) and <code>resample: daily</code>
+before the QDM correction.</p>
+<hr />
+<h2 id="method-quantile-delta-mapping-on-net-fluxes">Method: Quantile Delta Mapping on net fluxes</h2>
+<div class="codehilite"><pre><span></span><code>ERA5  ssr  (calibration period, daily W m⁻²)           → ref
+CMIP6 rsds − rsus  (historical, calibration period)     → hist
+CMIP6 rsds − rsus  (future, SSP period)                 → future
+
+QDM (kind=&#39;*&#39;):  corrected_net_sw = ref_quantile × (future / hist_quantile)
+</code></pre></div>
+
+<p>The same structure applies to <code>net_lw</code> with <code>kind='+'</code>:</p>
+<div class="codehilite"><pre><span></span><code>corrected_net_lw = ref_quantile + (future − hist_quantile)
+</code></pre></div>
+
+<p>QDM preserves the CMIP6 model's projected trend at each quantile while
+anchoring the distribution to the ERA5-observed climatology.</p>
+<hr />
+<h2 id="output">Output</h2>
+<p>The corrected fields are written as daily W m⁻² NetCDF files with CF metadata:</p>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th><code>long_name</code></th>
+<th><code>standard_name</code></th>
+<th><code>units</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>net_sw</code></td>
+<td>Surface Net Shortwave Radiation</td>
+<td><code>surface_net_downward_shortwave_flux</code></td>
+<td>W m⁻²</td>
+</tr>
+<tr>
+<td><code>net_lw</code></td>
+<td>Surface Net Longwave Radiation</td>
+<td><code>surface_net_downward_longwave_flux</code></td>
+<td>W m⁻²</td>
+</tr>
+</tbody>
+</table>
+<p>pyGETM reads these directly.  No decomposition back to downwelling + upwelling
+components is needed.</p>
+<hr />
+<h2 id="temporal-disaggregation">Temporal disaggregation</h2>
+<p>ERA5 <code>ssr</code> and <code>str</code> provide the sub-daily diurnal cycle of net radiation
+directly.  The diurnal cycle of <code>ssr</code> shows a clear daytime peak and nighttime
+zero, consistent with the multiplicative (<code>*</code>) kind.  The diurnal cycle of
+<code>str</code> has a small amplitude (dominated by the near-constant <code>strd</code>) consistent
+with the additive (<code>+</code>) kind.</p>
+<p>Add <code>net_sw</code> and <code>net_lw</code> blocks to <code>disaggregation.variables</code>:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">disaggregation</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">variables</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">net_sw</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;/data/ERA5/kaj/era5_ssr_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssr</span>
+<span class="w">      </span><span class="nt">scale_factor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.000277778</span><span class="w">   </span><span class="c1"># J/m² → W/m²</span>
+<span class="w">    </span><span class="nt">net_lw</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">era5_path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;/data/ERA5/kaj/era5_str_{year}.nc&quot;</span>
+<span class="w">      </span><span class="nt">era5_variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">str</span>
+<span class="w">      </span><span class="nt">scale_factor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.000277778</span>
+</code></pre></div>
+
+<p>The disaggregated output is at ERA5 sub-daily frequency (hourly or 3-hourly)
+in W m⁻².</p>
+<hr />
+<h2 id="configuration">Configuration</h2>
+<p>Full annotated configuration is in
+<a href="examples/bc_correct_example.yaml.html"><code>config/bc_correct_example.yaml</code></a>.
+Key sections:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># ── Variables ─────────────────────────────────────────────────────────────────</span>
+<span class="nt">variables</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">net_sw</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;*&quot;</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conservative</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">net_lw</span>
+<span class="w">    </span><span class="nt">kind</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;+&quot;</span>
+<span class="w">    </span><span class="nt">regridding</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">method</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">conservative</span>
+
+<span class="c1"># ── Observational reference (ERA5 net radiation, single variable) ─────────────</span>
+<span class="nt">reference</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">net_sw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;/data/ERA5/kaj/era5_ssr_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssr</span>
+<span class="w">    </span><span class="nt">scale_factor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.000277778</span>
+<span class="w">    </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span>
+
+<span class="w">  </span><span class="nt">net_lw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">local</span>
+<span class="w">    </span><span class="nt">path</span><span class="p">:</span><span class="w">     </span><span class="s">&quot;/data/ERA5/kaj/era5_str_{year}.nc&quot;</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">str</span>
+<span class="w">    </span><span class="nt">scale_factor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.000277778</span>
+<span class="w">    </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span>
+
+<span class="c1"># ── Historical CMIP6 (composite: rsds − rsus, rlds − rlus) ────────────────────</span>
+<span class="nt">historical</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">net_sw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">composite</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">minuend</span><span class="p">:</span><span class="w">       </span><span class="c1"># rsds — downwelling shortwave</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/historical/rsds/day/r1i1p1f1&quot;</span>
+<span class="w">      </span><span class="nt">subtrahend</span><span class="p">:</span><span class="w">    </span><span class="c1"># rsus — upwelling shortwave</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/historical/rsus/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">net_lw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">composite</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">minuend</span><span class="p">:</span><span class="w">       </span><span class="c1"># rlds — downwelling longwave</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/historical/rlds/day/r1i1p1f1&quot;</span>
+<span class="w">      </span><span class="nt">subtrahend</span><span class="p">:</span><span class="w">    </span><span class="c1"># rlus — upwelling longwave</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/historical/rlus/day/r1i1p1f1&quot;</span>
+
+<span class="c1"># ── Future CMIP6 (same composite pattern) ─────────────────────────────────────</span>
+<span class="nt">future_model</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">net_sw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">composite</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">minuend</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/{scenario}/rsds/day/r1i1p1f1&quot;</span>
+<span class="w">      </span><span class="nt">subtrahend</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/{scenario}/rsus/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">net_lw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">composite</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">minuend</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/{scenario}/rlds/day/r1i1p1f1&quot;</span>
+<span class="w">      </span><span class="nt">subtrahend</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://MPI-ESM1-2-HR/{scenario}/rlus/day/r1i1p1f1&quot;</span>
+</code></pre></div>
+
+<h3 id="gfdl-esm4-3-hourly-rsusrlus">GFDL-ESM4 (3-hourly rsus/rlus)</h3>
+<p>GFDL-ESM4 does not publish <code>rsus</code>/<code>rlus</code> at daily frequency; only 3-hourly
+and monthly are available.  The local files at
+<code>/data/CMIP6/ssp585-GFDL-ESM4/rsus.nc</code> contain 3-hourly data
+(shape <code>(251120, 37, 38)</code> = 86 years × 365 × 8 steps/day).
+Add <code>resample: daily</code> to each component block:</p>
+<div class="codehilite"><pre><span></span><code><span class="w">  </span><span class="nt">net_sw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">composite</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">minuend</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://GFDL-ESM4/{scenario}/rsds/3hr/r1i1p1f1&quot;</span>
+<span class="w">        </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span>
+<span class="w">      </span><span class="nt">subtrahend</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip6</span>
+<span class="w">        </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip6://GFDL-ESM4/{scenario}/rsus/3hr/r1i1p1f1&quot;</span>
+<span class="w">        </span><span class="nt">resample</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">daily</span>
+</code></pre></div>
+
+<hr />
+<h2 id="cmip7-note-direct-net-radiation">CMIP7 note: direct net radiation</h2>
+<p>CMIP7 may publish surface net radiation directly (candidate names: <code>rsns</code> for
+net shortwave, <code>rlns</code> for net longwave).  If so, replace the composite blocks
+in <code>historical</code> and <code>future_model</code> with simple single-source configs:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">historical</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">net_sw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip7</span><span class="w">                          </span><span class="c1"># hypothetical source type</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip7://Model/historical/rsns/day/r1i1p1f1&quot;</span>
+
+<span class="w">  </span><span class="nt">net_lw</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cmip7</span>
+<span class="w">    </span><span class="nt">uri</span><span class="p">:</span><span class="w">    </span><span class="s">&quot;cmip7://Model/historical/rlns/day/r1i1p1f1&quot;</span>
+</code></pre></div>
+
+<p>The <code>reference</code> entries (ERA5 <code>ssr</code>/<code>str</code>) and the <code>disaggregation</code> entries
+remain unchanged — ERA5 already provides the net directly.  The <code>variables</code>,
+<code>kind</code>, and <code>correction</code> sections need no changes.  This is the main benefit
+of the net-radiation approach: the config structure is identical regardless of
+whether the CMIP model publishes the net directly or requires a composite.</p>
+<hr />
+<h2 id="running">Running</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Correct net_sw and net_lw (all steps: correction + disaggregation)</span>
+bc<span class="w"> </span>correct<span class="w"> </span>--config<span class="w"> </span>config/bc.yaml
+
+<span class="c1"># Correct only the radiation variables</span>
+bc<span class="w"> </span>correct<span class="w"> </span>--config<span class="w"> </span>config/bc.yaml<span class="w"> </span>--variable<span class="w"> </span>net_sw<span class="w"> </span>net_lw
+
+<span class="c1"># Correction only (skip disaggregation)</span>
+bc<span class="w"> </span>correct<span class="w"> </span>--config<span class="w"> </span>config/bc.yaml<span class="w"> </span>--variable<span class="w"> </span>net_sw<span class="w"> </span>net_lw<span class="w"> </span>--steps<span class="w"> </span>correct
+
+<span class="c1"># Disaggregate from previously written BC files</span>
+bc<span class="w"> </span>correct<span class="w"> </span>--config<span class="w"> </span>config/bc.yaml<span class="w"> </span>--variable<span class="w"> </span>net_sw<span class="w"> </span>net_lw<span class="w"> </span>--steps<span class="w"> </span>disaggregate
+
+<span class="c1"># Diagnostics</span>
+bc<span class="w"> </span>diagnostics<span class="w"> </span>--config<span class="w"> </span>config/bc.yaml<span class="w"> </span>--variable<span class="w"> </span>net_sw<span class="w"> </span>net_lw
+</code></pre></div>
+
+<hr />
+<h2 id="key-references">Key references</h2>
+<ul>
+<li>Trenberth, K.E. &amp; Fasullo, J.T. (2012), <em>Tracking Earth's energy: From El
+  Niño to global warming</em>, Surv. Geophys. <strong>33</strong>, 413–426. — Global radiation
+  budget components and their observational constraints.</li>
+<li>Cannon, A.J., Sobie, S.R. &amp; Murdock, T.Q. (2015), <em>Bias correction of GCM
+  precipitation by quantile mapping: How well do methods preserve changes in
+  quantiles and extremes?</em>, J. Climate <strong>28</strong>, 6938–6959. — QDM derivation.</li>
+<li>Evaluation of Surface Upward Longwave Radiation in CMIP6:
+  <a href="https://www.mdpi.com/2072-4292/13/21/4464">Wild et al. (2021), Remote Sensing 13(21), 4464</a>
+  — validation of CMIP6 <code>rlus</code> against ground and satellite observations;
+  documents which models participated and their biases.</li>
+<li><a href="https://pcmdi.llnl.gov/CMIP6/ArchiveStatistics/esgf_data_holdings/ScenarioMIP/index.html">ESGF data holdings for CMIP6 ScenarioMIP</a>
+  — authoritative overview of what is archived per experiment.</li>
+</ul></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

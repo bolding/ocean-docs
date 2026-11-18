@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Gridded 2D Validation Guide · ocean-* documentation</title>
+<meta name="description" content="Gridded 2D Validation Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="index.html" aria-current="page">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-post</a></div><h1>Gridded 2D Validation Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-post</h2><ul><li><a href="index.html">Overview</a></li><li><a href="run-validation.html">run-analyses Guide</a></li><li><a href="gridded-2d-validation.html" aria-current="page">Gridded 2D Validation Guide</a></li><li><a href="gridded-3d-validation.html">Gridded 3D Validation Guide</a></li><li><a href="profile-validation.html">Profile Validation Guide</a></li><li><a href="tidal-analysis.html">Tidal Analysis Guide</a></li><li><a href="mle-comparison.html">MLE Cross-Experiment Comparison Guide</a></li><li><a href="scenarios.html">Scenario Analysis Guide</a></li><li><a href="river-projection.html">River Flow and Nutrient Load Projection Guide</a></li><li><a href="regridding.html">Regridding User Guide</a></li><li><a href="simulation-list.html">Simulation List Guide</a></li><li><a href="statistics-db.html">Statistics Database Guide</a></li><li><a href="manage-analyses.html">manage-analyses Guide</a></li><li><a href="reporting.html">Reporting Guide</a></li></ul></aside><article class="doc"><h1 id="gridded-2d-validation-guide">Gridded 2D Validation Guide</h1>
+<h2 id="overview">Overview</h2>
+<p><code>gridded-2d-validation</code> compares any horizontal 2-D model field against a
+gridded observation product.  Three layer modes are supported:</p>
+<table>
+<thead>
+<tr>
+<th>Layer</th>
+<th>Description</th>
+<th>Typical use</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>surface</code></td>
+<td>2-D field or top of 3-D output</td>
+<td>SST, SSS, SSH</td>
+</tr>
+<tr>
+<td><code>bottom</code></td>
+<td>Deepest wet cell of 3-D output</td>
+<td>Bottom temperature / salinity</td>
+</tr>
+<tr>
+<td><code>&lt;depth_m&gt;</code></td>
+<td>Horizontal slice at a fixed depth (m)</td>
+<td>Depth-layer climatology</td>
+</tr>
+</tbody>
+</table>
+<p>Multiple layers can be run in a single invocation.</p>
+<p>There are five shipped configs:
+<code>gridded_2d_validation.yaml</code>
+is the generic one, with any combination of layers via <code>--layers</code>.
+<code>gridded_2d_validation_surface.yaml</code>,
+<code>_bottom.yaml</code> and <code>_depths.yaml</code> are the dedicated single-purpose variants
+used for NSe. <code>_amm7_nemo.yaml</code> targets a NEMO AMM7 (GFDL-ESM4-forced) run
+instead of pyGETM — only <code>model.variable_map</code>/<code>model.base_path</code> differ; see
+that file's own header for its current (sample-data-only) status.</p>
+<h2 id="prerequisites">Prerequisites</h2>
+<ul>
+<li>Model NetCDF output accessible via config/sources.yaml
+  (see below), or directly via <code>model.base_path</code> / <code>model.filename_pattern</code></li>
+<li>A gridded observation file (local or Copernicus Marine / WOA)</li>
+<li><code>pip install -e .</code> with the <code>ocean-post</code> package</li>
+</ul>
+<h2 id="recommended-observation-sources">Recommended observation sources</h2>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>Source</th>
+<th>CMEMS product ID</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SST</td>
+<td>OSTIA (CMEMS)</td>
+<td><code>METOFFICE-GLO-SST-L4-REP-OBS-SST</code> (<code>analysed_sst</code>)</td>
+</tr>
+<tr>
+<td>Bottom temperature</td>
+<td>NW Shelf reanalysis</td>
+<td><code>cmems_mod_nws_phy-bottomt_my_7km-2D_P1M-m</code></td>
+</tr>
+<tr>
+<td>Bottom salinity</td>
+<td>NW Shelf reanalysis</td>
+<td><code>cmems_mod_nws_phy-so_my_7km-3D_P1M-m</code></td>
+</tr>
+<tr>
+<td>Depth-level T/S</td>
+<td>WOA23</td>
+<td>local file, NOAA/NCEI</td>
+</tr>
+</tbody>
+</table>
+<p>OSTIA SST is delivered in Kelvin — add <code>offset: -273.15</code> in the obs config block.</p>
+<h2 id="model-source---source----experiment----model----scenario">Model source: <code>--source</code> / <code>--experiment</code> / <code>--model</code> / <code>--scenario</code></h2>
+<p>Model input is NSe's <code>surf_bott_daily.nc</code> (surface: <code>temp_0</code>/<code>salt_0</code>,
+bottom and depth slices: <code>temp</code>/<code>salt</code>), located via
+config/sources.yaml:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Surface, CMEMS run</span>
+gridded-2d-validation<span class="w"> </span>--config<span class="w"> </span>config/gridded_2d_validation_surface.yaml<span class="w"> </span>--source<span class="w"> </span>CMEMS<span class="w"> </span>--experiment<span class="w"> </span>run01<span class="w"> </span>--years<span class="w"> </span><span class="m">2010</span><span class="w"> </span><span class="m">2011</span>
+
+<span class="c1"># Bottom, WOA run</span>
+gridded-2d-validation<span class="w"> </span>--config<span class="w"> </span>config/gridded_2d_validation_bottom.yaml<span class="w"> </span>--source<span class="w"> </span>WOA<span class="w"> </span>--experiment<span class="w"> </span>run01<span class="w"> </span>--years<span class="w"> </span><span class="m">2010</span><span class="w"> </span><span class="m">2011</span>
+
+<span class="c1"># Surface, CMIP6_raw run — forcing WITHOUT bias correction (e.g. ssp126)</span>
+gridded-2d-validation<span class="w"> </span>--config<span class="w"> </span>config/gridded_2d_validation_surface.yaml<span class="w"> </span>--source<span class="w"> </span>CMIP6_raw<span class="w"> </span>--model<span class="w"> </span>GFDL-ESM4<span class="w"> </span>--scenario<span class="w"> </span>ssp126<span class="w"> </span>--experiment<span class="w"> </span>run01<span class="w"> </span>--years<span class="w"> </span><span class="m">2010</span><span class="w"> </span><span class="m">2011</span>
+</code></pre></div>
+
+<p><code>CMIP6</code> is bias-corrected forcing; <code>CMIP6_raw</code> is not — use <code>CMIP6_raw</code> for
+raw-forcing runs such as <code>ssp126</code>; <code>--source CMIP6</code> points at a folder that
+does not exist for that model/scenario.</p>
+<p><code>--experiment</code> is the run folder name, and the output label becomes
+<code>&lt;SOURCE&gt;/&lt;experiment&gt;</code>, or <code>&lt;SOURCE&gt;/&lt;model&gt;-&lt;scenario&gt;/&lt;experiment&gt;</code> for
+CMIP6/CMIP6_raw.</p>
+<h2 id="config-file-generic-multi-layer">Config file (generic, multi-layer)</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># config/gridded_2d_validation.yaml</span>
+<span class="nt">area</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">NS</span>
+<span class="nt">experiment</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">Baseline</span><span class="w">   </span><span class="c1"># overridden by --experiment when --source is used</span>
+<span class="nt">years</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2010</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2011</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">2012</span><span class="p p-Indicator">]</span>
+
+<span class="nt">model</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># Location, layout and variable names come from config/sources.yaml</span>
+<span class="w">  </span><span class="c1"># (use --source). See the section above.</span>
+<span class="w">  </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pyGETM&quot;</span>
+<span class="w">  </span><span class="nt">filename_pattern</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;surf_bott_daily.nc&quot;</span>
+<span class="w">  </span><span class="nt">layout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">explicit_file</span>
+<span class="w">  </span><span class="nt">subdir</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">CMEMS</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{experiment}&quot;</span>
+<span class="w">    </span><span class="nt">WOA</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{experiment}&quot;</span>
+<span class="w">    </span><span class="nt">CMIP6</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{model}/{scenario}/{experiment}&quot;</span>
+<span class="w">    </span><span class="nt">CMIP6_raw</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;{model}/{scenario}/{experiment}&quot;</span>
+<span class="w">  </span><span class="nt">run_model</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">GFDL-ESM4</span><span class="w">     </span><span class="c1"># CMIP6 / CMIP6_raw run: overridden by --model</span>
+<span class="w">  </span><span class="nt">run_scenario</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">ssp126</span><span class="w">     </span><span class="c1"># CMIP6 / CMIP6_raw run: overridden by --scenario</span>
+<span class="w">  </span><span class="nt">time_offset_days</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-1</span>
+<span class="w">  </span><span class="nt">variable_map</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">temp</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sst</span><span class="w">        </span><span class="c1"># rename model variable if needed</span>
+
+<span class="nt">variables</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">temp</span><span class="p p-Indicator">]</span>
+
+<span class="nt">observations</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">temp</span><span class="p">:</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">name</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">OSTIA</span>
+<span class="w">      </span><span class="nt">path</span><span class="p">:</span>
+<span class="w">        </span><span class="nt">source</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">copernicus</span>
+<span class="w">        </span><span class="nt">dataset_id</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">METOFFICE-GLO-SST-L4-REP-OBS-SST</span>
+<span class="w">        </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">analysed_sst</span>
+<span class="w">      </span><span class="nt">offset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-273.15</span>
+
+<span class="nt">processing</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">layer</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">surface</span><span class="w">              </span><span class="c1"># single layer (default)</span>
+<span class="w">  </span><span class="c1"># layers: [surface, bottom, 50]   # or multiple — CLI: --layers surface bottom 50</span>
+<span class="w">  </span><span class="nt">chunking</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">enabled</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span><span class="w">                </span><span class="c1"># opt-in lazy/dask-chunked model loading; off by default</span>
+<span class="w">    </span><span class="nt">time_chunk</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span><span class="w">              </span><span class="c1"># days per processing chunk</span>
+<span class="w">    </span><span class="nt">spatial_chunk</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">null</span><span class="w">          </span><span class="c1"># or {lat: 50, lon: 50}</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">analyses_dir</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;${OCEANICU_ANALYSES_FOLDER}&quot;</span><span class="w">   </span><span class="c1"># no default — see below</span>
+</code></pre></div>
+
+<h3 id="outputanalyses_dir-has-no-default"><code>output.analyses_dir</code> has no default</h3>
+<p>There is no <code>./analyses</code> fallback. The value is expanded from
+<code>OCEANICU_ANALYSES_FOLDER</code> in this machine's data-roots file
+(<code>&lt;hostname&gt;_ocean-post_data_roots.yaml</code>), or set directly with
+<code>--analyses-dir</code>. If neither is set, the run stops with an error naming the
+missing variable.</p>
+<h2 id="usage">Usage</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Surface only (config default)</span>
+gridded-2d-validation<span class="w"> </span>--config<span class="w"> </span>config/gridded_2d_validation_surface.yaml<span class="w"> </span>--source<span class="w"> </span>CMEMS<span class="w"> </span>--experiment<span class="w"> </span>run01<span class="w"> </span>--years<span class="w"> </span><span class="m">2010</span><span class="w"> </span><span class="m">2011</span>
+
+<span class="c1"># Surface + bottom in one run (generic config)</span>
+gridded-2d-validation<span class="w"> </span>--config<span class="w"> </span>config/gridded_2d_validation.yaml<span class="w"> </span>--source<span class="w"> </span>CMEMS<span class="w"> </span>--experiment<span class="w"> </span>run01<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--layers<span class="w"> </span>surface<span class="w"> </span>bottom
+
+<span class="c1"># Surface + 50 m depth slice + bottom</span>
+gridded-2d-validation<span class="w"> </span>--config<span class="w"> </span>config/gridded_2d_validation.yaml<span class="w"> </span>--source<span class="w"> </span>CMEMS<span class="w"> </span>--experiment<span class="w"> </span>run01<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--layers<span class="w"> </span>surface<span class="w"> </span><span class="m">50</span><span class="w"> </span>bottom
+</code></pre></div>
+
+<p>The <code>--layers</code> flag overrides <code>processing.layer</code>/<code>processing.layers</code> in the
+config.</p>
+<h2 id="output">Output</h2>
+<p>Results are written to
+<code>&lt;OCEANICU_ANALYSES_FOLDER&gt;/areas/&lt;area&gt;/validations/&lt;SOURCE&gt;/&lt;experiment&gt;/</code>
+(or <code>.../&lt;SOURCE&gt;/&lt;model&gt;-&lt;scenario&gt;/&lt;experiment&gt;/</code> for CMIP6/CMIP6_raw):</p>
+<div class="codehilite"><pre><span></span><code>plots/physics/pyGETM/&lt;period&gt;/
+    surface/        ← time-mean maps, monthly bias maps, scatter plots
+    bottom/
+    50m/
+tables/physics/pyGETM/
+    &lt;variable&gt;_validation_statistics.txt
+</code></pre></div>
+
+<p>Statistics text files contain overall + monthly RMSE, bias, MAE, and
+correlation.</p>
+<h2 id="generating-residuals-for-mle-comparison">Generating residuals for MLE comparison</h2>
+<p><code>gridded-2d-validation</code> can write matched obs/model pairs as a parquet file
+for use with <code>mle-comparison</code>.  One file is written per layer:</p>
+<div class="codehilite"><pre><span></span><code>&lt;OCEANICU_ANALYSES_FOLDER&gt;/areas/&lt;area&gt;/validations/&lt;SOURCE&gt;/&lt;experiment&gt;/surface_residuals.parquet
+&lt;OCEANICU_ANALYSES_FOLDER&gt;/areas/&lt;area&gt;/validations/&lt;SOURCE&gt;/&lt;experiment&gt;/bottom_residuals.parquet
+&lt;OCEANICU_ANALYSES_FOLDER&gt;/areas/&lt;area&gt;/validations/&lt;SOURCE&gt;/&lt;experiment&gt;/0050m_residuals.parquet
+</code></pre></div>
+
+<p>Enable in the config (disabled by default to avoid large files):</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">save_residuals</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">true</span>
+<span class="w">  </span><span class="nt">spatial_thinning</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">stride</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">5</span><span class="w">        </span><span class="c1"># keep every 5th grid point in both lat and lon</span>
+<span class="w">    </span><span class="nt">time_stride</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1</span><span class="w">   </span><span class="c1"># keep every N-th time step (1 = all)</span>
+<span class="w">    </span><span class="nt">max_rows</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100000</span><span class="w"> </span><span class="c1"># hard cap per parquet; excess rows are randomly sampled</span>
+</code></pre></div>
+
+<p>The parquet schema is identical to profile residuals (<code>time</code>, <code>lat</code>, <code>lon</code>,
+<code>depth</code>, <code>value</code>, <code>model_value</code>, <code>variable</code>) so <code>mle-comparison</code> accepts it
+directly:</p>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Compare experiments using gridded surface obs</span>
+mle-comparison<span class="w"> </span>--analyses-dir<span class="w"> </span><span class="nv">$OCEANICU_ANALYSES_FOLDER</span><span class="w"> </span>--area<span class="w"> </span>NS<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--obs-types<span class="w"> </span>surface<span class="w"> </span>--variables<span class="w"> </span>TEMP<span class="w"> </span>PSAL
+
+<span class="c1"># Combine gridded surface obs with Argo profiles</span>
+mle-comparison<span class="w"> </span>--analyses-dir<span class="w"> </span><span class="nv">$OCEANICU_ANALYSES_FOLDER</span><span class="w"> </span>--area<span class="w"> </span>NS<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--obs-types<span class="w"> </span>surface<span class="w"> </span>argo<span class="w"> </span>--variables<span class="w"> </span>TEMP<span class="w"> </span>PSAL
+</code></pre></div>
+
+<p><strong>Thinning is important.</strong>  A 0.1° North Sea grid with daily SST obs has
+millions of rows, almost all spatially correlated.  Without thinning the
+MLE independence assumption is badly violated.  Start with <code>stride: 5</code> and
+<code>max_rows: 100000</code>; tune until Δlog L values are stable across stride choices.
+See the Scope section of <a href="mle-comparison.html">guides/mle-comparison.md</a> for
+a full discussion.</p>
+<h2 id="notes">Notes</h2>
+<ul>
+<li>Observations are regridded onto the model grid using bilinear interpolation
+  (xESMF); weight files are cached by MD5 hash under <code>regrid_weights/</code>.</li>
+<li>For bottom layer: the deepest non-NaN cell is selected per column using
+  sigma-coordinate-aware extraction.</li>
+<li>For depth slices: the model field is interpolated vertically to the
+  requested depth before regridding.</li>
+</ul>
+<h2 id="performance-chunked-loading-and-the-materialize-once-rule">Performance: chunked loading and the materialize-once rule</h2>
+<p><code>processing.chunking.enabled: true</code> opens the model files lazily
+(dask-backed) instead of reading them fully into memory up front — needed
+for long multi-year runs (e.g. 13-14 years of daily OSTIA SST) where eager
+loading would otherwise hold the whole period in RAM at once.</p>
+<p>Once loaded lazily, the model array is <strong>materialised exactly once</strong>
+(<code>.load()</code>), right after it's masked/aligned with the observations and
+before any of the statistics passes (overall stats, per-year stats, monthly
+stats, scatter/map plots) run against it. This matters because every one of
+those passes calls <code>.values</code>/<code>.compute()</code> on whatever array it's handed —
+on a dask-backed array that forces a fresh read from disk <em>every time</em>, not
+just once. Before this was fixed (commit <code>2b2d2b9</code>), a 14-year OSTIA SST
+run re-read the full dataset 15-30+ times and took 5+ hours on HPC; the
+single up-front <code>.load()</code> eliminates that amplification while keeping the
+lazy-open memory benefit for the initial read itself.</p>
+<p>For <code>gridded_2d_validation_depths.yaml</code> (multiple <code>processing.layers</code>
+depth values in one run), the same model file would otherwise be re-opened
+and re-read from scratch once per depth layer. A per-(variable, file) cache
+(<code>_raw_model_cache</code>, commit <code>f988bec</code>) keeps the raw per-year arrays across
+the <code>--layers</code>/<code>processing.layers</code> loop so each file is only read once
+regardless of how many depth layers are requested.</p>
+<p>If you add a new statistics pass or plot that consumes <code>model_da</code> (or the
+raw per-year model arrays), make sure it reads the already-materialised/
+cached array rather than re-opening or re-<code>.compute()</code>-ing a fresh lazy
+copy — that's exactly how this bug was reintroduced.</p>
+<h3 id="observations-regrid-before-materialising-not-after">Observations: regrid before materialising, not after</h3>
+<p>The obs side has its own, separate cost: for a Copernicus-sourced dataset
+(OSTIA), <code>load_observations()</code> returns a dask-backed array over
+Copernicus's remote ARCO/Zarr store — actual network transfer only
+happens when something forces <code>.compute()</code>. Materialising that array used
+to be forced onto dask's <strong>synchronous</strong> (single-core) scheduler, with no
+regridding done first — meaning the single-threaded step decoded the full
+native-OSTIA-resolution array (over the model's bounding box) rather than
+the much smaller, already-regridded model-grid array.</p>
+<p>Whenever there's no vertical layer to extract first (the surface case,
+and any obs product with no depth dimension at all — OSTIA/CCI-SST/
+OISST/CCI-SSS all qualify), the obs is now <strong>regridded while still
+lazy</strong>, before materialising at all: xESMF's regridder accepts a
+dask-backed <code>DataArray</code> directly (confirmed against the installed xesmf
+0.9.2 — <code>BaseRegridder.__call__</code> documents dask input, and
+<code>_prepare_for_xesmf</code>'s only values-forcing line never fires on a dask
+array, which has no <code>.flags</code> attribute). The regrid target is <code>model</code>
+(not yet time-sliced into <code>model_da</code>) — regridding only needs its
+horizontal lat/lon coordinates, which the later time-slicing never
+changes. Materialising the regridded (model-grid-sized) result then runs
+under dask's <strong>default</strong> (parallel) scheduler, not the forced
+single-core one. <code>_prepare_obs()</code> takes an <code>already_regridded</code> flag so it
+skips regridding a second time.</p>
+<p>The one case that still materialises-then-regrids, unchanged: a
+genuinely 3-D obs product (e.g. WOA profiles) being validated against a
+<code>bottom</code>/depth-slice layer — the depth slice has to be extracted on the
+obs's own native vertical grid first, which needs real values, so that
+path is left exactly as it was.</p>
+<p>Caching note: <code>cache.enabled: true</code> avoids re-fetching Copernicus data on
+a <em>warm</em> cache (the exact dataset/domain/time-range combination already
+has a local file under <code>cache.dir</code> on <em>this</em> machine). On a <em>cold</em> cache
+— e.g. the first time a given run executes on a machine whose
+<code>CACHE_ROOT</code> has never seen it before, even if the same validation has
+run many times elsewhere with a different <code>CACHE_ROOT</code> — the fetch still
+happens for real. There's also a known gap in <code>ocean-data</code>'s
+<code>DataLoader._load_copernicus()</code>: on a cache miss it writes the fetch to
+the local cache file but then returns the original <em>remote</em> lazy object
+rather than reloading from the file it just wrote, so a cold-cache run
+can end up fetching the same data over the network twice. Not yet fixed.</p>
+<h3 id="diagnosing-a-slow-run---verbose--debug-and-wall-vs-cpu-time">Diagnosing a slow run: <code>--verbose</code>/<code>--debug</code>, and wall vs. CPU time</h3>
+<p>Job 12762 (2026-10-23, 13 years NSe/OSTIA on SLURM) took 14+ hours and
+hit its walltime limit, with the per-run log showing only a single
+"Computing statistics in chunks..." line, then nothing, for 13+ hours. At
+INFO level (the default), neither <code>compute_time_mean_chunked()</code> nor
+<code>compute_statistics_chunked()</code> logged anything <em>between</em> a chunk loop's
+start and its end — the only progress indicator was <code>tqdm</code>'s bar, which
+is unreliable in a non-tty SLURM log (it's either silent or produces
+inconsistently-rendered lines depending on <code>tqdm</code>'s tty detection).
+Working out what had actually happened took scp-ing the job's raw
+<code>.out</code>/<code>.err</code> files and a <code>ps</code> snapshot history off HPC and reconstructing
+a timeline by hand.</p>
+<p>Both chunked loops now log a real line <strong>per chunk</strong>, every run, so that
+reconstruction is never necessary again:</p>
+<div class="codehilite"><pre><span></span><code>  time-mean chunk 37/95: 52.1s
+  stats chunk 12/95: 488.3s
+</code></pre></div>
+
+<p>Pass <code>--verbose</code> (alias <code>--debug</code>) for one more level of detail — each
+chunk line also reports <strong>wall-clock time vs. CPU time actually used</strong>:</p>
+<div class="codehilite"><pre><span></span><code>  stats chunk 12/95: wall=488.3s cpu=9.1s (2% busy -- low % here means
+  something else was competing for the machine, not this code)
+</code></pre></div>
+
+<p>This is the single most useful diagnostic for exactly the situation job
+12762 was in: wall time close to CPU time means the chunk's own
+computation is genuinely the bottleneck (a real code/algorithm problem,
+worth profiling further); wall time far exceeding CPU time — as turned
+out to be the case here — means the process was mostly <em>waiting</em>, not
+<em>computing</em>, which points at something external (I/O contention, or, as
+confirmed afterwards from <code>ps</code> evidence, another long-running process
+already occupying the same "exclusive" SLURM node before this job even
+started). <code>--verbose</code> applies to every <code>ocean-post</code> CLI script (added in
+<code>add_common_arguments()</code>), not just this one.</p></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

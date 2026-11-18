@@ -1,0 +1,459 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>CMEMS / CMIP6 Variable Mapping · ocean-* documentation</title>
+<meta name="description" content="CMEMS / CMIP6 Variable Mapping">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="index.html" aria-current="page">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-data</a></div><h1>CMEMS / CMIP6 Variable Mapping</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-data</h2><ul><li><a href="index.html">Overview</a></li><li><a href="data-loader.html">Data Loader User Guide</a></li><li><a href="cmems-cmip6-variable-mapping.html" aria-current="page">CMEMS / CMIP6 Variable Mapping</a></li></ul></aside><article class="doc"><h1 id="cmems--cmip6-variable-mapping">CMEMS / CMIP6 Variable Mapping</h1>
+<h2 id="overview">Overview</h2>
+<p>This guide documents how biogeochemical variables are named across three systems:</p>
+<ul>
+<li><strong>CMEMS</strong> — Copernicus Marine Service products (OBC boundary conditions)</li>
+<li><strong>CMIP6 / ESGF</strong> — climate model output (scenario forcing)</li>
+<li><strong>FABM-ERSEM</strong> — the biogeochemical model variables inside GETM/ERSEM</li>
+</ul>
+<h3 id="key-unit-difference">Key unit difference</h3>
+<p>CMIP6 uses <strong>SI units</strong> (concentrations in mol m⁻³), whereas CMEMS products typically
+report in <strong>mmol m⁻³</strong>.  A factor-of-1000 conversion is required when using CMIP6
+data as boundary conditions alongside CMEMS climatologies.</p>
+<p>Ammonium (<code>nh4</code>) is not always available in CMEMS products.  Total alkalinity
+(<code>talk</code>) and dissolved inorganic carbon (<code>dissic</code>) are generally absent from CMEMS
+daily/monthly files but are present in CMIP6 — SOCAT forcing must be kept for these
+variables until CMEMS provides them.</p>
+<hr />
+<h2 id="cmip6--cmems--fabm-ersem-mapping">CMIP6 → CMEMS → FABM-ERSEM mapping</h2>
+<table>
+<thead>
+<tr>
+<th>CMEMS variable</th>
+<th>CMIP6 variable</th>
+<th>CMIP6 units</th>
+<th>CF standard name</th>
+<th>FABM-ERSEM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>no3</td>
+<td>no3</td>
+<td>mol m⁻³</td>
+<td>mole_concentration_of_nitrate_in_sea_water</td>
+<td>N3_n</td>
+</tr>
+<tr>
+<td>po4</td>
+<td>po4</td>
+<td>mol m⁻³</td>
+<td>mole_concentration_of_dissolved_inorganic_phosphorus_in_sea_water</td>
+<td>N1_p</td>
+</tr>
+<tr>
+<td>si / sio4</td>
+<td>si</td>
+<td>mol m⁻³</td>
+<td>mole_concentration_of_dissolved_inorganic_silicon_in_sea_water</td>
+<td>N5_s</td>
+</tr>
+<tr>
+<td>nh4</td>
+<td>nh4</td>
+<td>mol m⁻³</td>
+<td>mole_concentration_of_ammonium_in_sea_water</td>
+<td>N4_n</td>
+</tr>
+<tr>
+<td>o2</td>
+<td>o2</td>
+<td>mol m⁻³</td>
+<td>mole_concentration_of_dissolved_molecular_oxygen_in_sea_water</td>
+<td>O2_o</td>
+</tr>
+<tr>
+<td>ph</td>
+<td>ph</td>
+<td>—</td>
+<td>sea_water_ph_reported_on_total_scale</td>
+<td>O3_pH</td>
+</tr>
+<tr>
+<td>chl</td>
+<td>chl</td>
+<td>—</td>
+<td>mass_concentration_of_chlorophyll_in_sea_water</td>
+<td>P1_chl+P2_chl+P3_chl+P4_chl</td>
+</tr>
+<tr>
+<td>phyc</td>
+<td>phyc</td>
+<td>—</td>
+<td>mole_concentration_of_phytoplankton_expressed_as_carbon_in_sea_water</td>
+<td>P1_c+P2_c+P3_c+P4_c</td>
+</tr>
+<tr>
+<td>—</td>
+<td>dissic</td>
+<td>mol m⁻³</td>
+<td>mole_concentration_of_dissolved_inorganic_carbon_in_sea_water</td>
+<td>O3_c</td>
+</tr>
+<tr>
+<td>—</td>
+<td>talk</td>
+<td>mol m⁻³</td>
+<td>sea_water_alkalinity_expressed_as_mole_equivalent</td>
+<td>O3_TA</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="cmems-product-tables">CMEMS product tables</h2>
+<h3 id="global--pisces-cmems_mod_glo_bgc_my_025deg_p1d-m--p1m-m">Global — PISCES (<code>cmems_mod_glo_bgc_my_0.25deg_P1D-m</code> / <code>P1M-m</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Dataset</th>
+<th>Variable (units)</th>
+<th>CF standard name</th>
+<th>FABM-ERSEM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>…P1D-m</td>
+<td>chl (mg m⁻³)</td>
+<td>mass_concentration_of_chlorophyll_a_in_sea_water</td>
+<td>P1_chl+P2_chl+P3_chl+P4_chl</td>
+</tr>
+<tr>
+<td>…P1D-m</td>
+<td>no3 (mmol m⁻³)</td>
+<td>mole_concentration_of_nitrate_in_sea_water</td>
+<td>N3_n</td>
+</tr>
+<tr>
+<td>…P1D-m</td>
+<td>po4 (mmol m⁻³)</td>
+<td>mole_concentration_of_phosphate_in_sea_water</td>
+<td>N1_p</td>
+</tr>
+<tr>
+<td>…P1D-m</td>
+<td>si (mmol m⁻³)</td>
+<td>mole_concentration_of_silicate_in_sea_water</td>
+<td>N5_s</td>
+</tr>
+<tr>
+<td>…P1D-m</td>
+<td>o2 (mmol m⁻³)</td>
+<td>mole_concentration_of_dissolved_molecular_oxygen_in_sea_water</td>
+<td>O2_o</td>
+</tr>
+<tr>
+<td>…P1D-m</td>
+<td>nppv</td>
+<td>net_primary_production_of_biomass_expressed_as_carbon_per_unit_volume_in_sea_water</td>
+<td>—</td>
+</tr>
+<tr>
+<td>…P1M-m</td>
+<td>ph</td>
+<td>sea_water_ph_reported_on_total_scale</td>
+<td>O3_pH</td>
+</tr>
+<tr>
+<td>…P1M-m</td>
+<td>phyc</td>
+<td>mole_concentration_of_phytoplankton_expressed_as_carbon_in_sea_water</td>
+<td>P1_c+P2_c+P3_c+P4_c</td>
+</tr>
+</tbody>
+</table>
+<h3 id="north-west-shelf--amm7ersem-cmems_mod_nws_bgc-_my_7km-3d_p1d-m">North-West Shelf — AMM7/ERSEM (<code>cmems_mod_nws_bgc-*_my_7km-3D_P1D-m</code>)</h3>
+<p>For AMM7 Baseline the following ERSEM-derived variables are available:</p>
+<table>
+<thead>
+<tr>
+<th>Dataset ID</th>
+<th>Variable</th>
+<th>CF standard name</th>
+<th>Units</th>
+<th>FABM-ERSEM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>cmems_mod_nws_bgc-chl_my_7km-3D_P1D-m</td>
+<td>chl</td>
+<td>mass_concentration_of_chlorophyll_a_in_sea_water</td>
+<td>mg m⁻³</td>
+<td>P1_chl+P2_chl+P3_chl+P4_chl</td>
+</tr>
+<tr>
+<td>cmems_mod_nws_bgc-no3_my_7km-3D_P1D-m</td>
+<td>no3</td>
+<td>mole_concentration_of_nitrate_in_sea_water</td>
+<td>mmol m⁻³</td>
+<td>N3_n</td>
+</tr>
+<tr>
+<td>cmems_mod_nws_bgc-po4_my_7km-3D_P1D-m</td>
+<td>po4</td>
+<td>mole_concentration_of_phosphate_in_sea_water</td>
+<td>mmol m⁻³</td>
+<td>N1_p</td>
+</tr>
+<tr>
+<td>cmems_mod_nws_bgc-o2_my_7km-3D_P1D-m</td>
+<td>o2</td>
+<td>mole_concentration_of_dissolved_molecular_oxygen_in_sea_water</td>
+<td>mmol m⁻³</td>
+<td>O2_o</td>
+</tr>
+<tr>
+<td>cmems_mod_nws_bgc-phyc_my_7km-3D_P1D-m</td>
+<td>phyc</td>
+<td>mole_concentration_of_phytoplankton_expressed_as_carbon_in_sea_water</td>
+<td>mmol C m⁻³</td>
+<td>P1_c+P2_c+P3_c+P4_c</td>
+</tr>
+<tr>
+<td>cmems_mod_nws_bgc-kd_my_7km-3D_P1D-m</td>
+<td>attn</td>
+<td>volume_beam_attenuation_coefficient_of_radiative_flux_in_sea_water</td>
+<td>m⁻¹</td>
+<td>—</td>
+</tr>
+<tr>
+<td>cmems_mod_nws_bgc-ph_my_7km-3D_P1D-m</td>
+<td>ph</td>
+<td>sea_water_ph_reported_on_total_scale</td>
+<td>1</td>
+<td>O3_pH</td>
+</tr>
+<tr>
+<td>cmems_mod_nws_bgc-spco2_my_7km-2D_P1D-m*</td>
+<td>spco2</td>
+<td>surface_partial_pressure_of_carbon_dioxide_in_sea_water</td>
+<td>Pa</td>
+<td>—</td>
+</tr>
+<tr>
+<td>cmems_mod_nws_bgc-nppv_my_7km-3D_P1D-m*</td>
+<td>nppv</td>
+<td>net_primary_production_of_biomass_expressed_as_carbon_per_unit_volume_in_sea_water</td>
+<td>mg C m⁻³ d⁻¹</td>
+<td>—</td>
+</tr>
+<tr>
+<td>cmems_mod_nws_bgc-pft_my_7km-3D-diato_P1D-m</td>
+<td>chl_diatom</td>
+<td>—</td>
+<td>—</td>
+<td>P1_chl</td>
+</tr>
+<tr>
+<td>cmems_mod_nws_bgc-pft_my_7km-3D-dino_P1D-m</td>
+<td>chl_dino</td>
+<td>—</td>
+<td>—</td>
+<td>P4_chl</td>
+</tr>
+<tr>
+<td>cmems_mod_nws_bgc-pft_my_7km-3D-nano_P1D-m</td>
+<td>chl_nano</td>
+<td>—</td>
+<td>—</td>
+<td>P2_chl</td>
+</tr>
+<tr>
+<td>cmems_mod_nws_bgc-pft_my_7km-3D-pico_P1D-m</td>
+<td>chl_pico</td>
+<td>—</td>
+<td>—</td>
+<td>P3_chl</td>
+</tr>
+</tbody>
+</table>
+<p>* 2-D (surface only)</p>
+<h3 id="baltic--balticsea_multiyear_bgc_003_012-cmems_mod_bal_bgc_my_p1m-m">Baltic — <code>BALTICSEA_MULTIYEAR_BGC_003_012</code> (<code>cmems_mod_bal_bgc_my_P1M-m</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Variable</th>
+<th>CF standard name</th>
+<th>Units</th>
+<th>FABM-ERSEM</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>chl</td>
+<td>mass_concentration_of_chlorophyll_a_in_sea_water</td>
+<td>mg m⁻³</td>
+<td>P1_chl+P2_chl+P3_chl+P4_chl</td>
+</tr>
+<tr>
+<td>no3</td>
+<td>mole_concentration_of_nitrate_in_sea_water</td>
+<td>mmol m⁻³</td>
+<td>N3_n</td>
+</tr>
+<tr>
+<td>po4</td>
+<td>mole_concentration_of_phosphate_in_sea_water</td>
+<td>mmol m⁻³</td>
+<td>N1_p</td>
+</tr>
+<tr>
+<td>o2</td>
+<td>mole_concentration_of_dissolved_molecular_oxygen_in_sea_water</td>
+<td>mmol m⁻³</td>
+<td>O2_o</td>
+</tr>
+<tr>
+<td>phyc</td>
+<td>mole_concentration_of_phytoplankton_expressed_as_carbon_in_sea_water</td>
+<td>mmol C m⁻³</td>
+<td>P1_c+P2_c+P3_c+P4_c</td>
+</tr>
+<tr>
+<td>nh4</td>
+<td>mole_concentration_of_ammonium_in_sea_water</td>
+<td>mmol m⁻³</td>
+<td>N4_n</td>
+</tr>
+<tr>
+<td>ph</td>
+<td>sea_water_ph_reported_on_total_scale</td>
+<td>1</td>
+<td>O3_pH</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="cmip6-naming-conventions">CMIP6 naming conventions</h2>
+<h3 id="ensemble-member-identifier-ripf">Ensemble member identifier (<code>ripf</code>)</h3>
+<table>
+<thead>
+<tr>
+<th>Index</th>
+<th>Meaning</th>
+<th>Typical value</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>r</td>
+<td>realization index</td>
+<td>first ensemble member</td>
+</tr>
+<tr>
+<td>i</td>
+<td>initialization index</td>
+<td>first initialization method</td>
+</tr>
+<tr>
+<td>p</td>
+<td>physics index</td>
+<td>first physics configuration</td>
+</tr>
+<tr>
+<td>f</td>
+<td>forcing index</td>
+<td>first forcing configuration</td>
+</tr>
+</tbody>
+</table>
+<p>Example: <code>r1i1p1f1</code> = primary ensemble member.</p>
+<h3 id="dataset-identifier-fields">Dataset identifier fields</h3>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Example</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>MIP era</td>
+<td>CMIP6</td>
+<td>CMIP Phase 6</td>
+</tr>
+<tr>
+<td>Activity</td>
+<td>ScenarioMIP</td>
+<td>future scenario experiment family</td>
+</tr>
+<tr>
+<td>Institution</td>
+<td>NOAA-GFDL</td>
+<td>modelling centre</td>
+</tr>
+<tr>
+<td>Model</td>
+<td>GFDL-ESM4</td>
+<td>Earth System Model name</td>
+</tr>
+<tr>
+<td>Experiment</td>
+<td>ssp126</td>
+<td>SSP1-2.6 scenario</td>
+</tr>
+<tr>
+<td>Member</td>
+<td>r1i1p1f1</td>
+<td>primary ensemble member</td>
+</tr>
+<tr>
+<td>Table</td>
+<td>Omon</td>
+<td>monthly ocean variables</td>
+</tr>
+</tbody>
+</table>
+<h3 id="grid-labels">Grid labels</h3>
+<table>
+<thead>
+<tr>
+<th>Label</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gn</code></td>
+<td>native model grid</td>
+</tr>
+<tr>
+<td><code>gr</code> / <code>gr1</code></td>
+<td>regular (remapped) grid — <code>gr1</code> is typically the ocean, <code>gr</code> may be atmosphere</td>
+</tr>
+</tbody>
+</table>
+<h3 id="example-cmip6-dataset-ids-used-in-neccton">Example CMIP6 dataset IDs used in NECCTON</h3>
+<div class="codehilite"><pre><span></span><code>CMIP6.ScenarioMIP.CNRM-CERFACS.CNRM-ESM2-1.ssp126.r1i1p1f2.Omon
+CMIP6.ScenarioMIP.CNRM-CERFACS.CNRM-ESM2-1.ssp245.r1i1p1f2.Omon
+CMIP6.ScenarioMIP.CNRM-CERFACS.CNRM-ESM2-1.ssp370.r1i1p1f2.Omon
+CMIP6.ScenarioMIP.NOAA-GFDL.GFDL-ESM4.ssp126.r1i1p1f1.Omon
+CMIP6.ScenarioMIP.NOAA-GFDL.GFDL-ESM4.ssp245.r1i1p1f1.Omon
+CMIP6.ScenarioMIP.NOAA-GFDL.GFDL-ESM4.ssp245.r1i1p1f1.Omon.o2.gr
+</code></pre></div>
+
+<h3 id="loading-via-data-loader">Loading via <code>data-loader</code></h3>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Load CMIP6 biogeochemistry via ESGF (PANGEO mirror first, OPeNDAP fallback)</span>
+data-loader<span class="w"> </span>--cmip6<span class="w"> </span>GFDL-ESM4/ssp126/no3/Omon/r1i1p1f1<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--domain<span class="w"> </span>-5.<span class="w"> </span><span class="m">15</span>.<span class="w"> </span><span class="m">50</span>.<span class="w"> </span><span class="m">65</span>.<span class="w"> </span>--time-range<span class="w"> </span><span class="m">2015</span>-01-01<span class="w"> </span><span class="m">2099</span>-12-31<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--output<span class="w"> </span>gfdl_no3_ssp126.nc
+
+<span class="c1"># Search what is available on ESGF</span>
+data-loader<span class="w"> </span>--esgf-describe<span class="w"> </span>--source-id<span class="w"> </span>GFDL-ESM4<span class="w"> </span>--variable-id<span class="w"> </span>no3
+</code></pre></div></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

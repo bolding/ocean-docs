@@ -1,0 +1,724 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Animations User Guide · ocean-* documentation</title>
+<meta name="description" content="Animations User Guide">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="../data/index.html">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="index.html" aria-current="page">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><div class="crumbs"><a href="index.html">ocean-plot</a></div><h1>Animations User Guide</h1></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-plot</h2><ul><li><a href="index.html">Overview</a></li><li><a href="plot-guide.html">Static Plot Guide</a></li><li><a href="animations-guide.html" aria-current="page">Animations User Guide</a></li></ul></aside><article class="doc"><h1 id="animations-user-guide">Animations User Guide</h1>
+<p><code>ocean-animations</code> creates time-lapse animations from ocean model NetCDF output.
+Three animation types are supported, all rendered with Cartopy coastlines and
+land fill when available.</p>
+<table>
+<thead>
+<tr>
+<th>Type</th>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>map</code></td>
+<td><code>ocean-animations --config map.yaml</code></td>
+<td>2-D horizontal field over time</td>
+</tr>
+<tr>
+<td><code>transect</code></td>
+<td><code>ocean-animations --config transect.yaml</code></td>
+<td>x-z or y-z vertical section</td>
+</tr>
+<tr>
+<td><code>comparison</code></td>
+<td><code>ocean-animations --config compare.yaml</code></td>
+<td>Model vs observations — same variable, overlaid TS</td>
+</tr>
+<tr>
+<td><code>independent</code></td>
+<td><code>ocean-animations --config indep.yaml</code></td>
+<td>Two different variables side by side, separate TS</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="contents">Contents</h2>
+<ol>
+<li><a href="#1-quick-start--init-animation-wizard">Quick start — init-animation wizard</a></li>
+<li><a href="#2-config-format">Config format</a>
+   - <a href="#21-horizontal-map">Horizontal map</a>
+   - <a href="#22-vertical-transect">Vertical transect</a>
+   - <a href="#23-two-panel-comparison">Two-panel comparison</a>
+   - <a href="#24-independent-two-panel">Independent two-panel</a></li>
+<li><a href="#3-auto-detection">Auto-detection</a></li>
+<li><a href="#4-time-series-panels">Time series panels</a></li>
+<li><a href="#5-layout-overrides">Layout overrides</a></li>
+<li><a href="#6-annotations">Annotations</a></li>
+<li><a href="#7-styling">Styling</a></li>
+<li><a href="#8-cli-flags-and-overrides">CLI flags and overrides</a></li>
+<li><a href="#9-python-api">Python API</a></li>
+<li><a href="#10-colormaps">Colormaps</a></li>
+<li><a href="#11-sigma-coordinates">Sigma coordinates</a></li>
+<li><a href="#12-troubleshooting">Troubleshooting</a></li>
+</ol>
+<hr />
+<h2 id="1-quick-start--init-animation-wizard">1. Quick start — init-animation wizard</h2>
+<p>The wizard probes a NetCDF file and writes a ready-to-run YAML:</p>
+<div class="codehilite"><pre><span></span><code>init-animation
+<span class="c1"># → prompts for file, variable, subset, time range, output path</span>
+<span class="c1"># → writes e.g. sst_map.yaml</span>
+
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>sst_map.yaml
+</code></pre></div>
+
+<p>No flags are needed once the YAML is written.</p>
+<hr />
+<h2 id="2-config-format">2. Config format</h2>
+<p>Every animation file uses a single top-level <code>plottype:</code> key that selects the
+animation kind — no <code>--type</code> flag needed on the command line.</p>
+<h3 id="21-horizontal-map">2.1 Horizontal map</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">plottype</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">map</span>
+
+<span class="nt">input</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/model/sst_daily.nc</span>
+<span class="w">  </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sst</span>
+<span class="w">  </span><span class="nt">time_slice</span><span class="p">:</span><span class="w">          </span><span class="c1"># optional — frame index range</span>
+<span class="w">    </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">    </span><span class="nt">end</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">365</span>
+
+<span class="nt">subset</span><span class="p">:</span><span class="w">                </span><span class="c1"># optional — omit for the full domain</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">48.0</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">65.0</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-12.0</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">12.0</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="c1"># file: sst_ns.mp4  # omit → auto-name from variable long_name</span>
+<span class="w">  </span><span class="nt">fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">15</span>
+
+<span class="c1"># title:    # omit → auto-derived from long_name / standard_name</span>
+<span class="c1"># colormap: # omit → auto-selected from variable metadata (thermal/balance/haline/…)</span>
+<span class="c1"># vmin:     # omit → data range</span>
+<span class="c1"># vmax:</span>
+</code></pre></div>
+
+<h3 id="22-vertical-transect">2.2 Vertical transect</h3>
+<div class="codehilite"><pre><span></span><code><span class="nt">plottype</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">transect</span>
+
+<span class="nt">input</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/model/output_3d.nc</span>
+<span class="w">  </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">temp</span>
+<span class="w">  </span><span class="nt">time_slice</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">    </span><span class="nt">end</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">120</span>
+
+<span class="nt">transect</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">along</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">lon</span><span class="w">           </span><span class="c1"># &#39;lon&#39; → x-z section  |  &#39;lat&#39; → y-z section</span>
+<span class="w">  </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">55.0</span><span class="w">            </span><span class="c1"># latitude of the x-z section  (required for along: lon)</span>
+<span class="w">  </span><span class="c1"># lon: 5.0           # longitude of the y-z section (required for along: lat)</span>
+<span class="w">  </span><span class="nt">z_var</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">hn</span><span class="w">            </span><span class="c1"># layer-height variable; omit to auto-detect from coordinates</span>
+<span class="w">  </span><span class="nt">z_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">200</span><span class="w">           </span><span class="c1"># maximum depth [m]; omit for full water column</span>
+<span class="w">  </span><span class="nt">show_grid</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">     </span><span class="c1"># true → draw curving sigma-level interface lines</span>
+<span class="w">  </span><span class="c1"># grid_color: white  # colour of interface lines (default: white)</span>
+<span class="w">  </span><span class="c1"># grid_stride: 2     # draw every N-th line in x and z (default: 1)</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">temp_xz_55N.mp4</span>
+<span class="w">  </span><span class="nt">fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4</span>
+
+<span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Temperature</span><span class="nv"> </span><span class="s">x-z</span><span class="nv"> </span><span class="s">transect</span><span class="nv"> </span><span class="s">at</span><span class="nv"> </span><span class="s">55</span><span class="nv"> </span><span class="s">°N&quot;</span>
+<span class="nt">colormap</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">thermal</span>
+<span class="nt">vmin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="nt">vmax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">20.0</span>
+</code></pre></div>
+
+<h3 id="23-two-panel-comparison">2.3 Two-panel comparison</h3>
+<p>Side-by-side animation — typically model (left) vs observations (right).
+A horizontal colorbar sits between the maps and any time-series panels.</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">plottype</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">comparison</span>
+
+<span class="nt">left</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/model/sst_daily.nc</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">temp</span>
+<span class="w">    </span><span class="nt">time_slice</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">      </span><span class="nt">end</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">365</span>
+<span class="w">  </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;pyGETM</span><span class="nv"> </span><span class="s">SST&quot;</span>
+<span class="w">  </span><span class="c1"># vmin:      # per-panel override of the shared vmin</span>
+<span class="w">  </span><span class="c1"># vmax:</span>
+<span class="w">  </span><span class="c1"># colormap:  # per-panel colormap (overrides top-level)</span>
+<span class="w">  </span><span class="c1"># offset:    # additive unit-conversion: value = value * factor + offset</span>
+<span class="w">  </span><span class="c1"># factor:    # multiplicative unit-conversion (default 1.0)</span>
+
+<span class="nt">right</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/obs/cmems_sst_daily.nc</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">analysed_sst</span>
+<span class="w">    </span><span class="nt">time_slice</span><span class="p">:</span>
+<span class="w">      </span><span class="nt">start</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0</span>
+<span class="w">      </span><span class="nt">end</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">365</span>
+<span class="w">  </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;CMEMS</span><span class="nv"> </span><span class="s">SST</span><span class="nv"> </span><span class="s">(satellite)&quot;</span>
+<span class="w">  </span><span class="nt">offset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-273.15</span><span class="w">      </span><span class="c1"># K → °C (CCI / CMEMS SST products store Kelvin)</span>
+
+<span class="nt">subset</span><span class="p">:</span><span class="w">                </span><span class="c1"># applied to both panels</span>
+<span class="w">  </span><span class="nt">lat_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">50.0</span>
+<span class="w">  </span><span class="nt">lat_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">62.0</span>
+<span class="w">  </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-5.0</span>
+<span class="w">  </span><span class="nt">lon_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10.0</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">sst_model_vs_obs.mp4</span>
+<span class="w">  </span><span class="nt">fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+
+<span class="c1"># title: &quot;North Sea SST — Model vs Satellite 2019&quot;</span>
+<span class="c1"># Omit title to auto-derive: &quot;&lt;left.title&gt; / &lt;right.title&gt;&quot;</span>
+
+<span class="nt">colormap</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">thermal</span>
+<span class="nt">vmin</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4.0</span>
+<span class="nt">vmax</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">22.0</span>
+<span class="nt">colorbar</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shared</span><span class="w">       </span><span class="c1"># &#39;shared&#39; (default) or &#39;individual&#39;</span>
+<span class="w">                       </span><span class="c1"># With &#39;individual&#39;, set vmin/vmax inside left:/right: blocks</span>
+
+<span class="c1"># time_sync: index     # &#39;index&#39; (default) — advance by frame index (equal-length axes);</span>
+<span class="w">                       </span><span class="c1">#   warns when paired frames differ in time</span>
+<span class="w">                       </span><span class="c1"># &#39;calendar&#39;        — match by date (different time resolutions);</span>
+<span class="w">                       </span><span class="c1">#   left frames with no right frame within the tolerance</span>
+<span class="w">                       </span><span class="c1">#   are left out (with a warning)</span>
+<span class="c1"># time_tolerance_hours: 24   # default: the right dataset&#39;s median time step</span>
+</code></pre></div>
+
+<p><strong>Colour range notes</strong></p>
+<ul>
+<li>The range is sampled only from the <strong>animated time window</strong> (frames within
+  <code>time_slice</code>), not the full dataset.  This prevents off-season values from
+  distorting the scale when you animate a winter subset of a year-long file.</li>
+<li><code>colorbar: individual</code> gives each panel its own colorbar and its own
+  auto-range (or use <code>left.vmin</code>/<code>left.vmax</code> and <code>right.vmin</code>/<code>right.vmax</code>).</li>
+<li><code>offset</code> and <code>factor</code> are applied <em>after</em> the spatial/temporal subset, so
+  they never slow down loading of large files.</li>
+</ul>
+<p><strong>Unit conversion example</strong> — CCI SST data is stored in Kelvin; to compare
+directly with a model in °C:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">right</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/CCI-SST/2020.nc</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">analysed_sst</span>
+<span class="w">  </span><span class="nt">offset</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-273.15</span><span class="w">     </span><span class="c1"># K → °C; applied after loading</span>
+<span class="nt">colorbar</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">shared</span><span class="w">      </span><span class="c1"># shared scale now works because both are in °C</span>
+</code></pre></div>
+
+<h3 id="24-independent-two-panel">2.4 Independent two-panel</h3>
+<p>Side-by-side animation of <strong>two different variables</strong> (e.g. temperature and
+salinity, SSH and SST, model run A vs run B).  Each panel has its own colorbar
+and, optionally, its own time-series subplot below.</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">plottype</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">independent</span>
+
+<span class="nt">left</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/model.nc</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">temp</span>
+<span class="w">  </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Temperature&quot;</span>
+<span class="w">  </span><span class="c1"># colormap: thermal      # omit to auto-select</span>
+<span class="w">  </span><span class="c1"># vmin: 4.0</span>
+<span class="w">  </span><span class="c1"># vmax: 22.0</span>
+<span class="w">  </span><span class="nt">timeseries</span><span class="p">:</span><span class="w">              </span><span class="c1"># optional — points shown on left TS panel only</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Station</span><span class="nv"> </span><span class="s">A&quot;</span>
+<span class="w">      </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">57.0</span>
+<span class="w">      </span><span class="nt">lon</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+<span class="w">      </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">white</span>
+
+<span class="nt">right</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">input</span><span class="p">:</span>
+<span class="w">    </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/data/model.nc</span><span class="w">   </span><span class="c1"># may be same or different file</span>
+<span class="w">    </span><span class="nt">variable</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">salt</span>
+<span class="w">  </span><span class="nt">title</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Salinity&quot;</span>
+<span class="w">  </span><span class="c1"># colormap: haline</span>
+<span class="w">  </span><span class="c1"># vmin: 30.0</span>
+<span class="w">  </span><span class="c1"># vmax: 36.0</span>
+<span class="w">  </span><span class="nt">timeseries</span><span class="p">:</span><span class="w">              </span><span class="c1"># optional — points shown on right TS panel only</span>
+<span class="w">    </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Station</span><span class="nv"> </span><span class="s">A&quot;</span>
+<span class="w">      </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">57.0</span>
+<span class="w">      </span><span class="nt">lon</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">5.0</span>
+<span class="w">      </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">deepskyblue</span>
+
+<span class="nt">colorbar</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">individual</span><span class="w">       </span><span class="c1"># &#39;individual&#39; (default) — each panel has its own</span>
+<span class="c1"># colorbar: shared         # unusual for different variables, but supported</span>
+
+<span class="nt">output</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">file</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">temp_salt.mp4</span>
+<span class="w">  </span><span class="nt">fps</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span>
+</code></pre></div>
+
+<p><strong>Differences from <code>comparison</code></strong></p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th><code>comparison</code></th>
+<th><code>independent</code></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Intended use</td>
+<td>Same variable, two sources</td>
+<td>Different variables</td>
+</tr>
+<tr>
+<td>Default colorbar</td>
+<td><code>shared</code></td>
+<td><code>individual</code></td>
+</tr>
+<tr>
+<td><code>timeseries:</code> location</td>
+<td>Top-level (both panels share)</td>
+<td>Under <code>left:</code> / <code>right:</code></td>
+</tr>
+<tr>
+<td>TS panel content</td>
+<td>Both datasets overlaid per panel</td>
+<td>Each panel shows its own variable</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-auto-detection">3. Auto-detection</h2>
+<p>When optional keys are omitted the animation fills them in from the data:</p>
+<table>
+<thead>
+<tr>
+<th>Key omitted</th>
+<th>What happens</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>output.file</code></td>
+<td>Named <code>&lt;long_name&gt;_map.mp4</code> (spaces → underscores)</td>
+</tr>
+<tr>
+<td><code>title</code></td>
+<td>Set to the variable <code>long_name</code> or <code>standard_name</code></td>
+</tr>
+<tr>
+<td><code>colormap</code></td>
+<td>Selected from variable name / standard_name patterns (see §9)</td>
+</tr>
+<tr>
+<td><code>vmin</code> / <code>vmax</code></td>
+<td>Computed from the data range of the first frame</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-time-series-panels">4. Time series panels</h2>
+<p>Add up to three point-location time series panels below (or to the right of) the
+map.  Each point gets a coloured dot on the map and its own subplot.</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">ts_layout</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">below</span><span class="w">       </span><span class="c1"># &#39;below&#39; (default) or &#39;right&#39;</span>
+
+<span class="nt">timeseries</span><span class="p">:</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;St.</span><span class="nv"> </span><span class="s">Malo&quot;</span>
+<span class="w">    </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">48.9</span>
+<span class="w">    </span><span class="nt">lon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">-1.8</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cyan</span><span class="w">        </span><span class="c1"># optional; defaults cycle through deepskyblue/yellow/lime</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Wadden</span><span class="nv"> </span><span class="s">Sea&quot;</span>
+<span class="w">    </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">54.0</span>
+<span class="w">    </span><span class="nt">lon</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">8.5</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">yellow</span>
+</code></pre></div>
+
+<p>For <strong><code>map</code></strong> animations, each panel shows the value at that point over time.</p>
+<p>For <strong><code>comparison</code></strong> animations, each panel shows <strong>both datasets</strong> in the same
+subplot: a solid line for the left panel and a dashed line for the right panel.
+A thin faint background trace shows the full animated window; the growing lines
+advance with the animation.  A legend identifies which line is which.</p>
+<p>For <strong><code>independent</code></strong> animations, timeseries are configured per panel under
+<code>left.timeseries</code> / <code>right.timeseries</code>.  Each TS subplot shows only its own
+panel's variable.</p>
+<p>Time-axis tick labels adapt automatically to the length of the window —
+short windows show day-of-month, longer windows show month abbreviations.</p>
+<hr />
+<h2 id="5-layout-overrides">5. Layout overrides</h2>
+<p>All plot types auto-compute figure size and row proportions from the content.
+Add a <code>layout:</code> block to the YAML to override any of these:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">layout</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">figsize</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">20</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">12</span><span class="p p-Indicator">]</span><span class="w">            </span><span class="c1"># [width, height] in inches</span>
+<span class="w">  </span><span class="nt">height_ratios</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">7</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">0.3</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">3.5</span><span class="p p-Indicator">]</span><span class="w"> </span><span class="c1"># row heights — map / colorbar / timeseries</span>
+<span class="w">  </span><span class="nt">dpi</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span><span class="w">                     </span><span class="c1"># output resolution</span>
+</code></pre></div>
+
+<p>For <code>map</code> animations with <code>ts_layout: right</code>, <code>width_ratios</code> is also supported:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">layout</span><span class="p">:</span>
+<span class="w">  </span><span class="nt">figsize</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">18</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">8</span><span class="p p-Indicator">]</span>
+<span class="w">  </span><span class="nt">width_ratios</span><span class="p">:</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">2.5</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">1</span><span class="p p-Indicator">]</span><span class="w">       </span><span class="c1"># map column / timeseries column</span>
+<span class="w">  </span><span class="nt">dpi</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">150</span>
+</code></pre></div>
+
+<p>The <code>init-animation</code> wizard writes a commented-out <code>layout:</code> block with the
+auto-computed defaults at the bottom of every generated YAML — uncomment and
+edit to fine-tune without needing to know the code.</p>
+<hr />
+<h2 id="6-annotations">6. Annotations</h2>
+<p>Geographic annotations can be overlaid on any map.  For animations, each
+annotation can have a time window; outside that window it is invisible.</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">annotations</span><span class="p">:</span>
+
+<span class="w">  </span><span class="c1"># ── Text label ──────────────────────────────────────────────────────────────</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">text</span>
+<span class="w">    </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">57.0</span>
+<span class="w">    </span><span class="nt">lon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4.0</span>
+<span class="w">    </span><span class="nt">text</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;North</span><span class="nv"> </span><span class="s">Sea&quot;</span>
+<span class="w">    </span><span class="nt">fontsize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">11</span><span class="w">          </span><span class="c1"># default 10</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">white</span><span class="w">          </span><span class="c1"># default white</span>
+<span class="w">    </span><span class="nt">ha</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">center</span><span class="w">            </span><span class="c1"># left/center/right, default left</span>
+<span class="w">    </span><span class="nt">va</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">bottom</span><span class="w">            </span><span class="c1"># top/center/bottom, default bottom</span>
+<span class="w">    </span><span class="nt">fontweight</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">normal</span><span class="w">    </span><span class="c1"># normal/bold, default normal</span>
+<span class="w">    </span><span class="nt">bbox</span><span class="p">:</span><span class="w">                 </span><span class="c1"># optional background box</span>
+<span class="w">      </span><span class="nt">facecolor</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">black</span>
+<span class="w">      </span><span class="nt">alpha</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.5</span>
+<span class="w">      </span><span class="nt">pad</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2</span>
+<span class="w">    </span><span class="nt">time_on</span><span class="p">:</span><span class="w">  </span><span class="l l-Scalar l-Scalar-Plain">0</span><span class="w">           </span><span class="c1"># frame index or ISO date &quot;2019-06-01&quot;; omit = always on</span>
+<span class="w">    </span><span class="nt">time_off</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">100</span><span class="w">         </span><span class="c1"># omit = stays on once activated</span>
+
+<span class="w">  </span><span class="c1"># ── Point marker (with optional text label) ─────────────────────────────────</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">point</span>
+<span class="w">    </span><span class="nt">lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">54.5</span>
+<span class="w">    </span><span class="nt">lon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">6.0</span>
+<span class="w">    </span><span class="nt">marker</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;*&quot;</span><span class="w">           </span><span class="c1"># default &quot;o&quot;</span>
+<span class="w">    </span><span class="nt">markersize</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">10</span><span class="w">        </span><span class="c1"># default 8</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">red</span>
+<span class="w">    </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Station</span><span class="nv"> </span><span class="s">A&quot;</span><span class="w">    </span><span class="c1"># optional; creates a text artist next to the marker</span>
+<span class="w">    </span><span class="nt">time_on</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">30</span>
+
+<span class="w">  </span><span class="c1"># ── Rectangle outline (optionally filled) ───────────────────────────────────</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">box</span>
+<span class="w">    </span><span class="nt">lat_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">54.0</span>
+<span class="w">    </span><span class="nt">lat_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">58.0</span>
+<span class="w">    </span><span class="nt">lon_min</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">3.0</span>
+<span class="w">    </span><span class="nt">lon_max</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">7.0</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">yellow</span>
+<span class="w">    </span><span class="nt">linewidth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.5</span><span class="w">        </span><span class="c1"># default 1.0</span>
+<span class="w">    </span><span class="nt">alpha</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">0.8</span><span class="w">            </span><span class="c1"># default 1.0</span>
+<span class="w">    </span><span class="nt">fill</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">false</span><span class="w">           </span><span class="c1"># true = semi-transparent fill</span>
+<span class="w">    </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&quot;</span><span class="w">             </span><span class="c1"># optional text at top-left corner</span>
+
+<span class="w">  </span><span class="c1"># ── Polyline through waypoints ───────────────────────────────────────────────</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">line</span>
+<span class="w">    </span><span class="nt">points</span><span class="p">:</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">55.0</span><span class="p p-Indicator">,</span><span class="w"> </span><span class="nv">-2.0</span><span class="p p-Indicator">]</span>
+<span class="w">      </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="p p-Indicator">[</span><span class="nv">55.0</span><span class="p p-Indicator">,</span><span class="w">  </span><span class="nv">8.0</span><span class="p p-Indicator">]</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">cyan</span>
+<span class="w">    </span><span class="nt">linewidth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.0</span>
+<span class="w">    </span><span class="nt">linestyle</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;--&quot;</span><span class="w">       </span><span class="c1"># default &quot;-&quot;</span>
+<span class="w">    </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;Section</span><span class="nv"> </span><span class="s">A&quot;</span><span class="w">   </span><span class="c1"># optional; placed at midpoint</span>
+
+<span class="w">  </span><span class="c1"># ── Directed arrow ───────────────────────────────────────────────────────────</span>
+<span class="w">  </span><span class="p p-Indicator">-</span><span class="w"> </span><span class="nt">type</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">arrow</span>
+<span class="w">    </span><span class="nt">from_lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">55.0</span>
+<span class="w">    </span><span class="nt">from_lon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">2.0</span>
+<span class="w">    </span><span class="nt">to_lat</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">57.0</span>
+<span class="w">    </span><span class="nt">to_lon</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">4.0</span>
+<span class="w">    </span><span class="nt">color</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">white</span>
+<span class="w">    </span><span class="nt">linewidth</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">1.5</span>
+<span class="w">    </span><span class="nt">label</span><span class="p">:</span><span class="w"> </span><span class="s">&quot;&quot;</span>
+</code></pre></div>
+
+<p><strong>Time control</strong> — <code>time_on</code> and <code>time_off</code> accept either:
+- An integer (0-based frame index)
+- An ISO date string (<code>"2019-06-01"</code>) — the nearest frame is selected</p>
+<p>Static plots (<code>ocean-plot</code>) draw all annotations unconditionally; the time keys
+are silently ignored.</p>
+<hr />
+<h2 id="7-styling">7. Styling</h2>
+<p>matplotlib loads its own config hierarchy automatically on import:</p>
+<ol>
+<li>System defaults (<code>matplotlibrc</code> bundled with matplotlib)</li>
+<li>Per-user: <code>~/.config/matplotlib/matplotlibrc</code></li>
+<li>Per-project: <code>matplotlibrc</code> in the current working directory (checked into the repo alongside the YAML configs)</li>
+<li>Named style sheets: <code>~/.config/matplotlib/stylelib/</code></li>
+</ol>
+<p>Edit these files directly to control fonts, sizes, DPI, line widths, and
+everything else matplotlib exposes.  No YAML key is needed for this.</p>
+<p>The <code>style:</code> key selects a named style (or a <code>.mplstyle</code> path) <strong>for a single
+run</strong>, without touching any config files:</p>
+<div class="codehilite"><pre><span></span><code><span class="nt">style</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">seaborn-v0_8-paper</span><span class="w">        </span><span class="c1"># any name accepted by plt.style.use()</span>
+<span class="nt">style</span><span class="p">:</span><span class="w"> </span><span class="l l-Scalar l-Scalar-Plain">/path/to/project.mplstyle</span><span class="w"> </span><span class="c1"># or a path to a .mplstyle file</span>
+</code></pre></div>
+
+<hr />
+<h2 id="8-cli-flags-and-overrides">8. CLI flags and overrides</h2>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Config mode — YAML drives all settings; a few flags still apply:</span>
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>map.yaml
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>map.yaml<span class="w"> </span>--show-grid<span class="w">           </span><span class="c1"># enable sigma grid</span>
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>map.yaml<span class="w"> </span>--grid-color<span class="w"> </span>black<span class="w">    </span><span class="c1"># override grid colour</span>
+
+<span class="c1"># These flags override the YAML when in config mode:</span>
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>map.yaml<span class="w"> </span>--variable<span class="w"> </span>tos<span class="w">        </span><span class="c1"># change variable</span>
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>map.yaml<span class="w"> </span>--output<span class="w"> </span>new.mp4<span class="w">      </span><span class="c1"># change output file</span>
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>map.yaml<span class="w"> </span>--title<span class="w"> </span><span class="s2">&quot;My title&quot;</span>
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>map.yaml<span class="w"> </span>--vmin<span class="w"> </span><span class="m">0</span><span class="w"> </span>--vmax<span class="w"> </span><span class="m">30</span>
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>map.yaml<span class="w"> </span>--level<span class="w"> </span><span class="m">5</span><span class="w">             </span><span class="c1"># depth level index</span>
+ocean-animations<span class="w"> </span>--config<span class="w"> </span>map.yaml<span class="w"> </span>--level<span class="w"> </span>bottom<span class="w">        </span><span class="c1"># bottom layer (default: surface)</span>
+
+<span class="c1"># Direct mode — no YAML; all flags required:</span>
+ocean-animations<span class="w"> </span>--input<span class="w"> </span>model.nc<span class="w"> </span>--variable<span class="w"> </span>sst<span class="w"> </span>--output<span class="w"> </span>sst.mp4
+ocean-animations<span class="w"> </span>--input<span class="w"> </span>model.nc<span class="w"> </span>--variable<span class="w"> </span>sst<span class="w"> </span>--output<span class="w"> </span>sst.mp4<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--lat-min<span class="w"> </span><span class="m">50</span><span class="w"> </span>--lat-max<span class="w"> </span><span class="m">65</span><span class="w"> </span>--lon-min<span class="w"> </span>-5<span class="w"> </span>--lon-max<span class="w"> </span><span class="m">10</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--fps<span class="w"> </span><span class="m">15</span><span class="w"> </span>--cmap<span class="w"> </span>haline<span class="w"> </span>--vmin<span class="w"> </span><span class="m">30</span><span class="w"> </span>--vmax<span class="w"> </span><span class="m">36</span>
+
+<span class="c1"># Interactive HTML (map only, no codec needed):</span>
+ocean-animations<span class="w"> </span>--input<span class="w"> </span>model.nc<span class="w"> </span>--variable<span class="w"> </span>sst<span class="w"> </span>--output<span class="w"> </span>sst.html<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--engine<span class="w"> </span>plotly
+</code></pre></div>
+
+<p>Full flag reference:</p>
+<table>
+<thead>
+<tr>
+<th>Flag</th>
+<th>Default</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>--config FILE</code></td>
+<td>—</td>
+<td>YAML config (recommended)</td>
+</tr>
+<tr>
+<td><code>--input FILE</code></td>
+<td>—</td>
+<td>Input NetCDF (direct mode)</td>
+</tr>
+<tr>
+<td><code>--variable VAR</code></td>
+<td>—</td>
+<td>Variable to animate</td>
+</tr>
+<tr>
+<td><code>--output FILE</code></td>
+<td>—</td>
+<td>Output path (.mp4 or .html)</td>
+</tr>
+<tr>
+<td><code>--fps N</code></td>
+<td><code>10</code></td>
+<td>Frames per second</td>
+</tr>
+<tr>
+<td><code>--level L</code></td>
+<td><code>surface</code></td>
+<td>Depth level: <code>surface</code>, <code>bottom</code> or a level index (map animations only)</td>
+</tr>
+<tr>
+<td><code>--cmap NAME</code></td>
+<td><code>thermal</code></td>
+<td>Colormap</td>
+</tr>
+<tr>
+<td><code>--vmin / --vmax VAL</code></td>
+<td>auto</td>
+<td>Colour scale limits</td>
+</tr>
+<tr>
+<td><code>--title TEXT</code></td>
+<td>auto</td>
+<td>Figure title</td>
+</tr>
+<tr>
+<td><code>--lat-min/max DEG</code></td>
+<td>full domain</td>
+<td>Spatial subset</td>
+</tr>
+<tr>
+<td><code>--lon-min/max DEG</code></td>
+<td>full domain</td>
+<td>Spatial subset</td>
+</tr>
+<tr>
+<td><code>--type map\|transect</code></td>
+<td><code>map</code></td>
+<td>Animation type (direct mode)</td>
+</tr>
+<tr>
+<td><code>--engine matplotlib\|plotly</code></td>
+<td><code>matplotlib</code></td>
+<td>Output engine</td>
+</tr>
+<tr>
+<td><code>--along lon\|lat</code></td>
+<td><code>lon</code></td>
+<td>Transect axis</td>
+</tr>
+<tr>
+<td><code>--lat / --lon DEG</code></td>
+<td>—</td>
+<td>Transect position</td>
+</tr>
+<tr>
+<td><code>--z-var VAR</code></td>
+<td><code>hn</code></td>
+<td>Layer-heights variable</td>
+</tr>
+<tr>
+<td><code>--z-max M</code></td>
+<td>full</td>
+<td>Maximum depth [m]</td>
+</tr>
+<tr>
+<td><code>--show-grid</code></td>
+<td>off</td>
+<td>Sigma-level interface lines</td>
+</tr>
+<tr>
+<td><code>--grid-color COLOR</code></td>
+<td><code>white</code></td>
+<td>Grid line colour</td>
+</tr>
+<tr>
+<td><code>--time-slice START:END</code></td>
+<td>all</td>
+<td>Frame index range</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9-python-api">9. Python API</h2>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_post.animations</span> <span class="kn">import</span> <span class="n">Animator</span>
+
+<span class="n">animator</span> <span class="o">=</span> <span class="n">Animator</span><span class="p">(</span><span class="n">engine</span><span class="o">=</span><span class="s1">&#39;matplotlib&#39;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+
+<span class="c1"># YAML-driven</span>
+<span class="n">animator</span><span class="o">.</span><span class="n">create_from_config</span><span class="p">(</span><span class="s1">&#39;animation.yaml&#39;</span><span class="p">)</span>
+
+<span class="c1"># Programmatic — horizontal map</span>
+<span class="kn">import</span> <span class="nn">xarray</span> <span class="k">as</span> <span class="nn">xr</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">xr</span><span class="o">.</span><span class="n">open_dataset</span><span class="p">(</span><span class="s1">&#39;/data/model_sst.nc&#39;</span><span class="p">)</span>
+<span class="n">animator</span><span class="o">.</span><span class="n">create_animation_from_data</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="n">ds</span><span class="p">[</span><span class="s1">&#39;sst&#39;</span><span class="p">],</span>
+    <span class="n">output</span><span class="o">=</span><span class="s1">&#39;sst.mp4&#39;</span><span class="p">,</span>
+    <span class="n">title</span><span class="o">=</span><span class="s1">&#39;North Sea SST&#39;</span><span class="p">,</span>
+    <span class="n">fps</span><span class="o">=</span><span class="mi">10</span><span class="p">,</span>
+    <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;thermal&#39;</span><span class="p">,</span>
+    <span class="n">vmin</span><span class="o">=</span><span class="mf">5.0</span><span class="p">,</span>
+    <span class="n">vmax</span><span class="o">=</span><span class="mf">25.0</span><span class="p">,</span>
+<span class="p">)</span>
+
+<span class="c1"># Programmatic — transect</span>
+<span class="n">animator</span><span class="o">.</span><span class="n">create_transect_animation</span><span class="p">(</span>
+    <span class="n">data</span><span class="o">=</span><span class="n">ds</span><span class="p">[</span><span class="s1">&#39;temp&#39;</span><span class="p">],</span>
+    <span class="n">output</span><span class="o">=</span><span class="s1">&#39;temp_xz.mp4&#39;</span><span class="p">,</span>
+    <span class="n">along</span><span class="o">=</span><span class="s1">&#39;lon&#39;</span><span class="p">,</span>
+    <span class="n">lat</span><span class="o">=</span><span class="mf">55.0</span><span class="p">,</span>
+    <span class="n">hn</span><span class="o">=</span><span class="n">ds</span><span class="p">[</span><span class="s1">&#39;hn&#39;</span><span class="p">],</span>
+    <span class="n">z_max</span><span class="o">=</span><span class="mi">200</span><span class="p">,</span>
+    <span class="n">cmap</span><span class="o">=</span><span class="s1">&#39;thermal&#39;</span><span class="p">,</span>
+    <span class="n">show_grid</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+<span class="p">)</span>
+</code></pre></div>
+
+<hr />
+<h2 id="10-colormaps">10. Colormaps</h2>
+<p>The colormap is auto-selected from variable name and <code>standard_name</code> when
+<code>colormap:</code> is omitted.  Override with any cmocean or matplotlib name.</p>
+<table>
+<thead>
+<tr>
+<th>Variable type</th>
+<th>Auto-selected colormap</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Temperature</td>
+<td><code>thermal</code></td>
+</tr>
+<tr>
+<td>Salinity</td>
+<td><code>haline</code></td>
+</tr>
+<tr>
+<td>SSH / sea level</td>
+<td><code>balance</code> (diverging)</td>
+</tr>
+<tr>
+<td>Velocity components u, v</td>
+<td><code>balance</code></td>
+</tr>
+<tr>
+<td>Speed / current magnitude</td>
+<td><code>speed</code></td>
+</tr>
+<tr>
+<td>Precipitation / runoff</td>
+<td><code>rain</code></td>
+</tr>
+<tr>
+<td>Shortwave radiation</td>
+<td><code>solar</code></td>
+</tr>
+<tr>
+<td>Oxygen</td>
+<td><code>oxy</code></td>
+</tr>
+<tr>
+<td>Chlorophyll</td>
+<td><code>algae</code></td>
+</tr>
+<tr>
+<td>Density</td>
+<td><code>dense</code></td>
+</tr>
+<tr>
+<td>Bias / anomaly</td>
+<td><code>balance</code></td>
+</tr>
+<tr>
+<td>Everything else</td>
+<td><code>thermal</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="11-sigma-coordinates">11. Sigma coordinates</h2>
+<p>Transect animations use the model's actual terrain-following sigma levels when
+layer-height data is available.</p>
+<p><strong>With <code>z_var: hn</code></strong> — <code>hn</code> gives the thickness of each layer at each grid
+point.  Cumulative sums from the bottom give actual depths; sigma levels appear
+as curving lines in depth space.</p>
+<p><strong>Without <code>hn</code></strong> — the code looks for a 2-D depth coordinate attached to the
+variable via the NetCDF <code>coordinates</code> attribute (e.g. <code>zct_av</code>).  A 1-D depth
+coord is broadcast uniformly; as a last resort the layer index is used.</p>
+<p><strong><code>show_grid: true</code></strong> draws sigma-level interface lines.  Use <code>grid_stride: N</code>
+to thin the grid (draw every N-th line) on fine meshes.</p>
+<hr />
+<h2 id="12-troubleshooting">12. Troubleshooting</h2>
+<p><strong>ffmpeg not found</strong></p>
+<div class="codehilite"><pre><span></span><code>FileNotFoundError: [Errno 2] No such file or directory: &#39;ffmpeg&#39;
+</code></pre></div>
+
+<p>Install ffmpeg and verify with <code>ffmpeg -version</code>.</p>
+<p><strong>Colormap "thermal" not available</strong> — install cmocean: <code>pip install cmocean</code>.</p>
+<p><strong>Empty animation / all-NaN frames</strong> — the spatial subset may have excluded all
+valid data.  Run <code>ocean-animations --config map.yaml --verbose</code> and check the
+reported data ranges against the subset bounds.</p>
+<p><strong>Auto-named output ends up in wrong directory</strong> — set <code>output.file</code> explicitly
+or run the command from the directory where the output should land.</p>
+<p><strong>Transect shows flat sigma levels</strong> — <code>hn</code> is not in the file.  Check for an
+attached depth coordinate or specify <code>z_var: &lt;name&gt;</code>.</p>
+<p><strong>Comparison right panel shows constant colour</strong> — the observation file may
+store values in different units (e.g. Kelvin vs °C).  Add <code>offset: -273.15</code>
+(or the appropriate value) inside the <code>right:</code> block and set <code>colorbar: shared</code>
+so both panels use the same converted scale.</p>
+<p><strong>Comparison colour range includes out-of-season values</strong> — if the observation
+file covers a full year but <code>time_slice</code> selects only winter, the auto-range
+should already be restricted to those frames.  If it is not, set <code>vmin</code>/<code>vmax</code>
+explicitly.</p></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>

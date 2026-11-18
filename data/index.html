@@ -1,0 +1,280 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ocean-data · ocean-* documentation</title>
+<meta name="description" content="Loading observations, reanalyses and CMIP6; coordinate and variable names">
+<link rel="icon" href="../assets/logo_stacked.png">
+<link rel="stylesheet" href="../assets/style.css"><link rel="stylesheet" href="../assets/code.css"></head>
+<body>
+<header class="topbar"><div class="topin"><a class="brand" href="../index.html"><img src="../assets/logo_wide.png" alt="Bolding &amp; Bruggeman"><span>ocean-* documentation</span></a>
+<nav aria-label="Sections"><a href="../index.html">Overview</a><a href="../install.html">Installation</a><a href="index.html" aria-current="page">ocean-data</a><a href="../prep/index.html">ocean-prep</a><a href="../post/index.html">ocean-post</a><a href="../plot/index.html">ocean-plot</a><a href="../common/index.html">ocean-common</a><a href="../commands.html">Commands</a></nav></div></header>
+<section class="band"><div class="bandin"><h1>ocean-data</h1><p>Loading observations, reanalyses and CMIP6; coordinate and variable names</p></div></section>
+<main><div class="layout"><aside class="side"><h2>ocean-data</h2><ul><li><a href="index.html" aria-current="page">Overview</a></li><li><a href="data-loader.html">Data Loader User Guide</a></li><li><a href="cmems-cmip6-variable-mapping.html">CMEMS / CMIP6 Variable Mapping</a></li></ul></aside><article class="doc"><h1 id="ocean-data">ocean-data</h1>
+<p>Data loading and coordinate utilities for ocean model data.  Provides a unified
+<code>DataLoader</code> that transparently handles local NetCDF/Zarr files, Copernicus Marine
+(CMEMS), CMIP6 (Pangeo / ESGF), Argo, ICES, GLODAP, WOD, EMODnet, and ERA5 cloud
+archives behind a single interface.  A <code>CoordinateMapper</code> resolves the 20+ naming
+conventions used by different models and reanalysis products so the rest of your
+code never hard-codes <code>"lat"</code> vs <code>"latitude"</code> vs <code>"nav_lat"</code>.</p>
+<p>For the full ocean-* toolkit, install via <a href="../install.html">ocean-stack</a> rather than this package alone.
+<code>ocean-stack</code> sets up all four packages in a single conda environment — the recommended route because <code>xesmf</code>/<code>esmpy</code>, used for regridding in <code>ocean-data</code> and <code>ocean-prep</code>, must come from conda-forge and cannot be reliably pip-installed.
+Use the standalone installation below only if you need this package in isolation.</p>
+<p>Part of the <strong>ocean-*</strong> family:
+<a href="index.html">ocean-data</a> ·
+<a href="../plot/index.html">ocean-plot</a> ·
+<a href="../prep/index.html">ocean-prep</a> ·
+<a href="../post/index.html">ocean-post</a></p>
+<hr />
+<h2 id="installation">Installation</h2>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span>.
+</code></pre></div>
+
+<p>Optional extras install the backends for each remote source:</p>
+<div class="codehilite"><pre><span></span><code>pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[copernicus]&quot;</span><span class="w">   </span><span class="c1"># copernicusmarine</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[pangeo]&quot;</span><span class="w">       </span><span class="c1"># intake-esm + gcsfs  (CMIP6 via Pangeo)</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[esgf]&quot;</span><span class="w">         </span><span class="c1"># intake-esgf + esgf-pyclient (CMIP6 via ESGF)</span>
+pip<span class="w"> </span>install<span class="w"> </span>-e<span class="w"> </span><span class="s2">&quot;.[era5gcs]&quot;</span><span class="w">      </span><span class="c1"># gcsfs + zarr  (ERA5 on Google Cloud)</span>
+</code></pre></div>
+
+<hr />
+<h2 id="quick-start">Quick start</h2>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.data_loader</span> <span class="kn">import</span> <span class="n">DataLoader</span>
+<span class="kn">from</span> <span class="nn">ocean_data.name_mappings</span> <span class="kn">import</span> <span class="n">CoordinateMapper</span>
+
+<span class="n">loader</span> <span class="o">=</span> <span class="n">DataLoader</span><span class="p">()</span>
+
+<span class="c1"># Local file</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="s1">&#39;/data/model.nc&#39;</span><span class="p">,</span> <span class="s1">&#39;temperature&#39;</span><span class="p">)</span>
+
+<span class="c1"># CMEMS Copernicus Marine</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span>
+    <span class="s1">&#39;copernicus://cmems_mod_glo_phy-thetao_anfc_0.083deg_P1D-m&#39;</span><span class="p">,</span>
+    <span class="n">variable</span><span class="o">=</span><span class="s1">&#39;thetao&#39;</span><span class="p">,</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+    <span class="n">time_range</span><span class="o">=</span><span class="p">(</span><span class="s1">&#39;2023-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2023-01-31&#39;</span><span class="p">),</span>
+<span class="p">)</span>
+
+<span class="c1"># CMIP6 via Pangeo</span>
+<span class="n">ds</span> <span class="o">=</span> <span class="n">loader</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span>
+    <span class="s1">&#39;cmip6://MPI-ESM1-2-HR/historical/tos/Omon/r1i1p1f1&#39;</span><span class="p">,</span>
+    <span class="n">domain</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">},</span>
+<span class="p">)</span>
+
+<span class="c1"># Coordinate-agnostic access</span>
+<span class="n">mapper</span> <span class="o">=</span> <span class="n">CoordinateMapper</span><span class="p">()</span>
+<span class="n">lat_name</span> <span class="o">=</span> <span class="n">mapper</span><span class="o">.</span><span class="n">find_coordinate</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="s1">&#39;latitude&#39;</span><span class="p">)</span>   <span class="c1"># returns &#39;nav_lat&#39;, &#39;latt&#39;, &#39;lat&#39;, etc.</span>
+</code></pre></div>
+
+<hr />
+<h2 id="supported-data-sources">Supported data sources</h2>
+<table>
+<thead>
+<tr>
+<th>Source</th>
+<th>URI scheme / loader</th>
+<th>Backend</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Local NetCDF / Zarr</td>
+<td>path or <code>zarr://...</code></td>
+<td>xarray</td>
+</tr>
+<tr>
+<td>CMEMS (Copernicus Marine)</td>
+<td><code>copernicus://...</code></td>
+<td>copernicusmarine</td>
+</tr>
+<tr>
+<td>CMIP6 via Pangeo</td>
+<td><code>cmip6://MODEL/EXP/VAR/FREQ/MEMBER</code></td>
+<td>intake-esm + gcsfs</td>
+</tr>
+<tr>
+<td>CMIP6 via ESGF</td>
+<td><code>esgf://...</code></td>
+<td>intake-esgf / esgf-pyclient</td>
+</tr>
+<tr>
+<td>Argo floats</td>
+<td><code>argo://...</code></td>
+<td>Ifremer ERDDAP</td>
+</tr>
+<tr>
+<td>ICES/ECOVAL</td>
+<td><code>ices://...</code></td>
+<td>ICES Web API</td>
+</tr>
+<tr>
+<td>GLODAP</td>
+<td><code>glodap://...</code></td>
+<td>local NetCDF</td>
+</tr>
+<tr>
+<td>World Ocean Database</td>
+<td><code>wod://...</code></td>
+<td>local NetCDF</td>
+</tr>
+<tr>
+<td>EMODnet Physics</td>
+<td><code>emodnet://...</code></td>
+<td>EMODnet REST API</td>
+</tr>
+<tr>
+<td>EMODnet Chemistry</td>
+<td><code>emodnet-chemistry://...</code></td>
+<td>EMODnet REST API</td>
+</tr>
+<tr>
+<td>ERA5 (cloud)</td>
+<td><code>era5gcs://...</code> / <code>era5aws://...</code></td>
+<td>gcsfs / s3fs</td>
+</tr>
+<tr>
+<td>ISIMIP</td>
+<td><code>isimip://...</code></td>
+<td>ISIMIP REST API</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="commands">Commands</h2>
+<table>
+<thead>
+<tr>
+<th>Command</th>
+<th>Description</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>data-loader</code></td>
+<td>Load and inspect ocean data — local NetCDF/Zarr, CMEMS, CMIP6, cloud archives</td>
+</tr>
+<tr>
+<td><code>argo-download</code></td>
+<td>Download Argo float profiles from the GDAC ERDDAP</td>
+</tr>
+<tr>
+<td><code>argo-describe</code></td>
+<td>Overview and statistics of a downloaded Argo dataset</td>
+</tr>
+<tr>
+<td><code>ices-download</code></td>
+<td>Download ICES/EMODnet oceanographic profiles</td>
+</tr>
+<tr>
+<td><code>ices-describe</code></td>
+<td>Overview of a downloaded ICES/EMODnet dataset</td>
+</tr>
+<tr>
+<td><code>emodnet-download</code></td>
+<td>Download physical oceanographic data from EMODnet Physics</td>
+</tr>
+<tr>
+<td><code>emodnet-describe</code></td>
+<td>Overview of a downloaded EMODnet Physics dataset</td>
+</tr>
+<tr>
+<td><code>emodnet-chemistry-download</code></td>
+<td>Download EMODnet Chemistry contaminant data</td>
+</tr>
+<tr>
+<td><code>wod-download</code></td>
+<td>Download profiles from the World Ocean Database</td>
+</tr>
+<tr>
+<td><code>time-fix-helper</code></td>
+<td>Diagnose and repair broken time axes in NetCDF files</td>
+</tr>
+<tr>
+<td><code>update-name-mappings</code></td>
+<td>Update <code>config/name_mappings.yaml</code> from online canonical sources</td>
+</tr>
+</tbody>
+</table>
+<div class="codehilite"><pre><span></span><code><span class="c1"># Inspect a local file or download from any source</span>
+data-loader<span class="w"> </span>/data/model.nc<span class="w"> </span>--info
+data-loader<span class="w"> </span>--copernicus<span class="w"> </span>cmems_obs-sst_atl_phy_nrt_l3s_P1D-m<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--variable<span class="w"> </span>sea_surface_temperature<span class="w"> </span>--domain<span class="w"> </span>-5<span class="w"> </span><span class="m">15</span><span class="w"> </span><span class="m">50</span><span class="w"> </span><span class="m">65</span><span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--time-range<span class="w"> </span><span class="m">2023</span>-01-01<span class="w"> </span><span class="m">2023</span>-01-31<span class="w"> </span>--output<span class="w"> </span>sst.nc
+data-loader<span class="w"> </span>--cmip6<span class="w"> </span>CESM2/historical/tos/Omon/r1i1p1f1<span class="w"> </span><span class="se">\</span>
+<span class="w">    </span>--domain<span class="w"> </span>-5<span class="w"> </span><span class="m">15</span><span class="w"> </span><span class="m">50</span><span class="w"> </span><span class="m">65</span><span class="w"> </span>--time-range<span class="w"> </span><span class="m">1990</span>-01-01<span class="w"> </span><span class="m">1990</span>-12-31<span class="w"> </span>--output<span class="w"> </span>cesm2.nc
+
+<span class="c1"># Check data availability without downloading</span>
+data-loader<span class="w"> </span>--check-source<span class="w"> </span>cmip6://MPI-ESM1-2-HR/ssp245/tas/day/r1i1p1f1
+bc<span class="w"> </span>check<span class="w"> </span>--config<span class="w"> </span>config/bc.yaml<span class="w">            </span><span class="c1"># ocean-prep: every source of a BC config</span>
+
+<span class="c1"># Argo</span>
+argo-download<span class="w"> </span>--domain<span class="w"> </span>-5<span class="w"> </span><span class="m">15</span><span class="w"> </span><span class="m">50</span><span class="w"> </span><span class="m">65</span><span class="w"> </span>--years<span class="w"> </span><span class="m">2015</span><span class="w"> </span><span class="m">2020</span><span class="w"> </span>--output-dir<span class="w"> </span>/data/argo/
+argo-describe<span class="w"> </span>--file<span class="w"> </span>/data/argo/argo_NS_2015.parquet
+
+<span class="c1"># ICES / ECOVAL</span>
+ices-download<span class="w">  </span>--domain<span class="w"> </span>-5<span class="w"> </span><span class="m">15</span><span class="w"> </span><span class="m">50</span><span class="w"> </span><span class="m">65</span><span class="w"> </span>--years<span class="w"> </span><span class="m">2010</span><span class="w"> </span><span class="m">2020</span><span class="w"> </span>--output-dir<span class="w"> </span>/data/ices/
+ices-describe<span class="w">  </span>--file<span class="w"> </span>/data/ices/ices_NS.parquet
+
+<span class="c1"># EMODnet Physics</span>
+emodnet-download<span class="w"> </span>--domain<span class="w"> </span>-5<span class="w"> </span><span class="m">15</span><span class="w"> </span><span class="m">50</span><span class="w"> </span><span class="m">65</span><span class="w"> </span>--output-dir<span class="w"> </span>/data/emodnet/
+emodnet-describe<span class="w"> </span>--file<span class="w"> </span>/data/emodnet/emodnet_NS.parquet
+
+<span class="c1"># EMODnet Chemistry</span>
+emodnet-chemistry-download<span class="w"> </span>--domain<span class="w"> </span>-5<span class="w"> </span><span class="m">15</span><span class="w"> </span><span class="m">50</span><span class="w"> </span><span class="m">65</span><span class="w"> </span>--output-dir<span class="w"> </span>/data/emodnet_chem/
+
+<span class="c1"># World Ocean Database</span>
+wod-download<span class="w"> </span>--domain<span class="w"> </span>-5<span class="w"> </span><span class="m">15</span><span class="w"> </span><span class="m">50</span><span class="w"> </span><span class="m">65</span><span class="w"> </span>--years<span class="w"> </span><span class="m">2000</span><span class="w"> </span><span class="m">2020</span><span class="w"> </span>--output-dir<span class="w"> </span>/data/wod/
+
+<span class="c1"># Diagnose a broken time axis</span>
+time-fix-helper<span class="w"> </span>/data/model_bad_times.nc
+</code></pre></div>
+
+<hr />
+<h2 id="coordinatemapper">CoordinateMapper</h2>
+<p><code>CoordinateMapper</code> reads <code>config/name_mappings.yaml</code> and resolves coordinate names
+across all common model and reanalysis conventions:</p>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.name_mappings</span> <span class="kn">import</span> <span class="n">CoordinateMapper</span>
+
+<span class="n">mapper</span> <span class="o">=</span> <span class="n">CoordinateMapper</span><span class="p">()</span>
+<span class="n">lat</span>  <span class="o">=</span> <span class="n">mapper</span><span class="o">.</span><span class="n">find_coordinate</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="s1">&#39;latitude&#39;</span><span class="p">)</span>    <span class="c1"># &#39;latt&#39;, &#39;nav_lat&#39;, &#39;lat&#39;, …</span>
+<span class="n">lon</span>  <span class="o">=</span> <span class="n">mapper</span><span class="o">.</span><span class="n">find_coordinate</span><span class="p">(</span><span class="n">da</span><span class="p">,</span> <span class="s1">&#39;longitude&#39;</span><span class="p">)</span>
+<span class="n">time</span> <span class="o">=</span> <span class="n">mapper</span><span class="o">.</span><span class="n">find_time_dimension</span><span class="p">(</span><span class="n">da</span><span class="p">)</span>
+</code></pre></div>
+
+<p>Supported models out of the box: pyGETM (<code>latt</code>/<code>lont</code>), NEMO (<code>nav_lat</code>/<code>nav_lon</code>),
+ROMS (<code>lat_rho</code>/<code>lon_rho</code>), CESM (<code>TLAT</code>/<code>TLONG</code>), ERA5 (<code>latitude</code>/<code>longitude</code>),
+standard CF (<code>lat</code>/<code>lon</code>).  Adding a new model = add aliases to
+<code>config/name_mappings.yaml</code>; no Python changes needed.</p>
+<hr />
+<h2 id="spatial-utilities">Spatial utilities</h2>
+<div class="codehilite"><pre><span></span><code><span class="kn">from</span> <span class="nn">ocean_data.data_utils</span> <span class="kn">import</span> <span class="n">subset_domain</span><span class="p">,</span> <span class="n">subset_time</span><span class="p">,</span> <span class="n">match_lon_convention</span>
+
+<span class="n">domain</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;lon_min&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">5</span><span class="p">,</span> <span class="s1">&#39;lon_max&#39;</span><span class="p">:</span> <span class="mi">15</span><span class="p">,</span> <span class="s1">&#39;lat_min&#39;</span><span class="p">:</span> <span class="mi">50</span><span class="p">,</span> <span class="s1">&#39;lat_max&#39;</span><span class="p">:</span> <span class="mi">65</span><span class="p">}</span>
+<span class="n">ds_sub</span> <span class="o">=</span> <span class="n">subset_domain</span><span class="p">(</span><span class="n">ds</span><span class="p">,</span> <span class="n">domain</span><span class="p">)</span>
+<span class="n">ds_sub</span> <span class="o">=</span> <span class="n">subset_time</span><span class="p">(</span><span class="n">ds_sub</span><span class="p">,</span> <span class="p">(</span><span class="s1">&#39;2020-01-01&#39;</span><span class="p">,</span> <span class="s1">&#39;2020-12-31&#39;</span><span class="p">))</span>
+</code></pre></div>
+
+<hr />
+<h2 id="guides">Guides</h2>
+<table>
+<thead>
+<tr>
+<th>Guide</th>
+<th>Topics</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><a href="data-loader.html">guides/data-loader.md</a></td>
+<td>All sources, URI schemes, domain/time subsetting, coverage checks</td>
+</tr>
+<tr>
+<td><a href="cmems-cmip6-variable-mapping.html">guides/cmems-cmip6-variable-mapping.md</a></td>
+<td>Variable naming conventions across CMEMS and CMIP6</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>Python 3.11+ · License: MIT</em></p></article></div></main>
+<footer class="foot"><div class="footin"><img src="../assets/logo_stacked.png" alt="Bolding &amp; Bruggeman">
+<div><p>Bolding &amp; Bruggeman · <a href="https://www.bolding-bruggeman.com">www.bolding-bruggeman.com</a></p>
+<p>Generated from the documentation of the ocean-* packages on 18 November 2026. The packages themselves are not public yet.</p></div></div></footer>
+</body></html>
