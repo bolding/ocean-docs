@@ -17,7 +17,8 @@ the <code>analyses/</code> tree, and records the numbers in a SQLite database at
 <code>summary_common.read_stats_file</code>); the TXT file is not read back. The
 database is an index for queries across experiments, areas and variables; it
 can be rebuilt from the files with <code>manage-analyses import-stats --apply
---rebuild</code>.</p>
+--rebuild</code>. On the production server <code>backup_statsdb.sh</code> keeps a nightly copy
+(30 days plus the 1st of each month).</p>
 <p>The database is managed by <code>lib/stats_db.py</code>.</p>
 <h2 id="tables">Tables</h2>
 <table>
